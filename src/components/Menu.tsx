@@ -12,7 +12,21 @@ const categories = [
   { id: 'smoothie', name: 'Smoothies', icon: Sparkles },
 ];
 
-const menuItems = [
+type Product = {
+  id: number;
+  name: string;
+  description: string;
+  category: string;
+  image: string;
+  benefits: string[];
+  price: number;
+  status: 'available' | 'coming_soon' | 'sold_out';
+  rating: number;
+  reviews: number;
+  tags: string[];
+};
+
+const menuItems: Product[] = [
   {
     id: 1,
     name: 'Ionized Alkaline Water',
@@ -155,7 +169,7 @@ export default function Menu() {
     });
   }, [selectedCategory, debouncedSearch, sortBy, priceRange, selectedTags]);
 
-  const handleBuyNow = (item: typeof menuItems[0]) => {
+  const handleBuyNow = (item: Product) => {
     addToCart(item);
     navigate('/checkout');
   };

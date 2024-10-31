@@ -40,6 +40,7 @@ export default function ContactInfo() {
             id="firstName"
             {...register('firstName', { required: 'First name is required' })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="given-name"
           />
           {errors.firstName && (
             <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
@@ -55,6 +56,7 @@ export default function ContactInfo() {
             id="lastName"
             {...register('lastName', { required: 'Last name is required' })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="family-name"
           />
           {errors.lastName && (
             <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
@@ -76,6 +78,7 @@ export default function ContactInfo() {
               },
             })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="email"
           />
           {errors.email && (
             <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -97,6 +100,7 @@ export default function ContactInfo() {
               },
             })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="tel"
           />
           {errors.phone && (
             <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
@@ -112,6 +116,7 @@ export default function ContactInfo() {
             {...register('address', { required: 'Address is required' })}
             rows={3}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="street-address"
           />
           {errors.address && (
             <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
@@ -127,6 +132,7 @@ export default function ContactInfo() {
             id="city"
             {...register('city', { required: 'City is required' })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="address-level2"
           />
           {errors.city && (
             <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
@@ -141,12 +147,51 @@ export default function ContactInfo() {
             id="state"
             {...register('state', { required: 'State is required' })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="address-level1"
           >
             <option value="">Select a state</option>
-            <option value="MH">Maharashtra</option>
-            <option value="DL">Delhi</option>
+
+            <option value="AP">Andhra Pradesh</option>
+            <option value="AR">Arunachal Pradesh</option>
+            <option value="AS">Assam</option>
+            <option value="BR">Bihar</option>
+            <option value="CG">Chhattisgarh</option>
+            <option value="GA">Goa</option>
+            <option value="GJ">Gujarat</option>
+            <option value="HR">Haryana</option>
+            <option value="HP">Himachal Pradesh</option>
+            <option value="JK">Jammu and Kashmir</option>
+            <option value="JH">Jharkhand</option>
             <option value="KA">Karnataka</option>
-            {/* Add more states */}
+            <option value="KL">Kerala</option>
+            <option value="MP">Madhya Pradesh</option>
+            <option value="MH">Maharashtra</option>
+            <option value="MN">Manipur</option>
+            <option value="ML">Meghalaya</option>
+            <option value="MZ">Mizoram</option>
+            <option value="NL">Nagaland</option>
+            <option value="OR">Odisha</option>
+            <option value="PB">Punjab</option>
+            <option value="RJ">Rajasthan</option>
+            <option value="SK">Sikkim</option>
+            <option value="TN">Tamil Nadu</option>
+            <option value="TG">Telangana</option>
+            <option value="TR">Tripura</option>
+            <option value="UP">Uttar Pradesh</option>
+            <option value="UK">Uttarakhand</option>
+            <option value="WB">West Bengal</option>
+
+            <option disabled>----------------------------------------- Union Territories -----------------------------------------</option>
+
+            <option value="AN">Andaman and Nicobar Islands</option>
+            <option value="CH">Chandigarh</option>
+            <option value="DN">Dadra and Nagar Haveli</option>
+            <option value="DD">Daman and Diu</option>
+            <option value="DL">Delhi</option>
+            <option value="LD">Lakshadweep</option>
+            <option value="PY">Puducherry</option>
+            <option value="LA">Ladakh</option>
+
           </select>
           {errors.state && (
             <p className="mt-1 text-sm text-red-600">{errors.state.message}</p>
@@ -168,6 +213,7 @@ export default function ContactInfo() {
               },
             })}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            autoComplete="postal-code"
           />
           {errors.pincode && (
             <p className="mt-1 text-sm text-red-600">{errors.pincode.message}</p>

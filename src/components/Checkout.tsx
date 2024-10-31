@@ -127,6 +127,7 @@ export default function Checkout() {
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                  autoComplete="name"
                 />
               </div>
               {/* Email Address */}
@@ -142,6 +143,7 @@ export default function Checkout() {
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                  autoComplete="email"
                 />
               </div>
               {/* Phone Number */}
@@ -157,6 +159,7 @@ export default function Checkout() {
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                  autoComplete="tel"
                 />
               </div>
               {/* Delivery Address */}
@@ -172,6 +175,7 @@ export default function Checkout() {
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                  autoComplete="street-address"
                 ></textarea>
               </div>
               {/* Delivery Method */}
