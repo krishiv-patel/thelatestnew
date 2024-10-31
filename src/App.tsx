@@ -18,21 +18,45 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsConditions from './components/TermsConditions';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
-import Home from './components/Hero';
-
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <ErrorBoundary>
-          <NotificationProvider>
-            <CartProvider>
-              <div className="flex flex-col min-h-screen">
+    <ErrorBoundary>
+      <NotificationProvider>
+        <AuthProvider>
+          <CartProvider>
+            <Router>
+              <div className="min-h-screen bg-white">
                 <Navbar />
-                <main className="flex-grow">
+                <main>
                   <Routes>
-                    <Route path="/" element={<Home />} />
+                    <Route
+                      path="/"
+                      element={
+                        <>
+                          <section id="home">
+                            <Hero />
+                          </section>
+                          <section id="features">
+                            <Features />
+                          </section>
+                          <section id="menu">
+                            <Menu />
+                          </section>
+                          <section id="contact">
+                            <Contact />
+                          </section>
+                        </>
+                      }
+                    />
+                    <Route
+                      path="/checkout"
+                      element={
+                        <ProtectedRoute>
+                          <Checkout />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route
@@ -58,11 +82,11 @@ function App() {
                 </main>
                 <Footer />
               </div>
-            </CartProvider>
-          </NotificationProvider>
-        </ErrorBoundary>
-      </AuthProvider>
-    </Router>
+            </Router>
+          </CartProvider>
+        </AuthProvider>
+      </NotificationProvider>
+    </ErrorBoundary>
   );
 }
 
