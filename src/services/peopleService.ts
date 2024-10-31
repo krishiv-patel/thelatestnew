@@ -1,5 +1,7 @@
-import { httpsCallable } from 'firebase/functions';
-import functions from '../firebase'; // Now correctly initialized as Functions
+import { httpsCallable, getFunctions } from 'firebase/functions';
+import app from '../firebase'; // FirebaseApp instance
+
+const functions = getFunctions(app);
 
 export const fetchUserContacts = async () => {
   const getContacts = httpsCallable(functions, 'getContacts');
