@@ -4,6 +4,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { RecaptchaVerifier } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AlertCircle } from 'lucide-react';
+import { FaGoogle } from 'react-icons/fa'; // Import Google Icon
+import Button from './Button';
+import Spinner from './Spinner';
 
 declare global {
   interface Window {
@@ -40,20 +43,11 @@ export default function Login() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      // Request user interaction before opening popup
-      const userInteracted = window.confirm('You will be redirected to Google Sign-in. Please allow popups for this site.');
-      
-      if (userInteracted) {
-        await signInWithGoogle();
-        navigate('/profile');
-      } else {
-        setErrorMessage('Google Sign-in was cancelled');
-      }
+      await signInWithGoogle();
+      navigate('/profile');
     } catch (error: any) {
       if (error.code === 'auth/popup-blocked') {
-        setErrorMessage(
-          'Popup was blocked. Please allow popups for this site and try again.'
-        );
+        setErrorMessage('Popup was blocked. Please allow popups for this site and try again.');
       } else {
         setErrorMessage(error.message || 'Failed to sign in with Google');
       }
@@ -96,7 +90,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
@@ -158,15 +152,9 @@ export default function Login() {
           </div>
 
           <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
-                loading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200`}
-            >
+            <Button type="submit" isLoading={loading} disabled={loading}>
               {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+            </Button>
           </div>
         </form>
 
@@ -186,11 +174,13 @@ export default function Login() {
             <button
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                loading ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200`}
+              className={`w-full flex items-center justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors ${
+                loading ? 'cursor-not-allowed' : ''
+              }`}
             >
-              {loading ? 'Signing in...' : 'Sign in with Google'}
+              {/* Google Logo */}
+              <FaGoogle className="w-5 h-5 mr-2" aria-hidden="true" />
+              Sign in with Google
             </button>
           </div>
 

@@ -17,76 +17,53 @@ import Profile from './components/Profile';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsConditions from './components/TermsConditions';
 import ProtectedRoute from './components/ProtectedRoute';
-// import AdminRoute from './components/AdminRoute'; // Optional: Separate component for admin routes
+import ErrorBoundary from './components/ErrorBoundary';
+import Home from './components/Hero';
+
 
 function App() {
   return (
-    <NotificationProvider>
-      <CartProvider>
-        <AuthProvider>
-          <Router>
-            <div className="min-h-screen bg-white">
-              <Navbar />
-              <main>
-                <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <>
-                        <section id="home">
-                          <Hero />
-                        </section>
-                        <section id="features">
-                          <Features />
-                        </section>
-                        <section id="menu">
-                          <Menu />
-                        </section>
-                        <section id="contact">
-                          <Contact />
-                        </section>
-                      </>
-                    }
-                  />
-                  <Route
-                    path="/checkout"
-                    element={
-                      <ProtectedRoute>
-                        <Checkout />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/signup" element={<Signup />} />
-                  <Route
-                    path="/admin"
-                    element={
-                      <ProtectedRoute adminOnly={true}>
-                        <AdminDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/profile"
-                    element={
-                      <ProtectedRoute>
-                        <Profile />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                  <Route path="/terms-conditions" element={<TermsConditions />} />
-                  {/* Add more routes as needed */}
-                </Routes>
-              </main>
-              <Footer />
-            </div>
-          </Router>
-        </AuthProvider>
-      </CartProvider>
-    </NotificationProvider>
+    <Router>
+      <AuthProvider>
+        <ErrorBoundary>
+          <NotificationProvider>
+            <CartProvider>
+              <div className="flex flex-col min-h-screen">
+                <Navbar />
+                <main className="flex-grow">
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
+                    <Route
+                      path="/admin"
+                      element={
+                        <ProtectedRoute adminOnly={true}>
+                          <AdminDashboard />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/profile"
+                      element={
+                        <ProtectedRoute>
+                          <Profile />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/terms-conditions" element={<TermsConditions />} />
+                    {/* Add more routes as needed */}
+                  </Routes>
+                </main>
+                <Footer />
+              </div>
+            </CartProvider>
+          </NotificationProvider>
+        </ErrorBoundary>
+      </AuthProvider>
+    </Router>
   );
 }
 
-export default App;
-
+export default App; 
