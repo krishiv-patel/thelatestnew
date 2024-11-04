@@ -27,7 +27,7 @@ interface AuthContextType {
   loading: boolean;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, phoneNumber?: string) => Promise<void>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
@@ -54,66 +54,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const createOrUpdateUserProfile = async (firebaseUser: any) => {
-    try {
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const userDoc = await getDoc(userRef);
-      
-      if (!userDoc.exists()) {
-        // Create new user profile
-        const userData = {
-          uid: firebaseUser.uid,
-          name: firebaseUser.displayName || '',
-          email: firebaseUser.email || '',
-          role: 'user',
-          phone: firebaseUser.phoneNumber || '',
-          address: '',
-          createdAt: new Date().toISOString(),
-        };
-        
-        await setDoc(userRef, userData);
-        return userData;
-      } else {
-        // Update existing user profile
-        const existingData = userDoc.data();
-        const updatedData = {
-          ...existingData,
-          name: firebaseUser.displayName || existingData.name,
-          email: firebaseUser.email || existingData.email,
-          phone: firebaseUser.phoneNumber || existingData.phone,
-          lastLoginAt: new Date().toISOString(),
-        };
-        
-        await setDoc(userRef, updatedData, { merge: true });
-        return updatedData;
-      }
-    } catch (error) {
-      console.error('Error managing user profile:', error);
-      throw error;
-    }
-  };
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        if (firebaseUser) {
-          const idToken = await firebaseUser.getIdToken();
-          setToken(idToken);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        setToken(token);
 
-          const userData = await createOrUpdateUserProfile(firebaseUser);
-          setUser(userData as User);
+        // Fetch user profile from Firestore
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          setUser(userDoc.data() as User);
         } else {
-          setUser(null);
-          setToken(null);
+          // Create a new user document if it doesn't exist
+          const newUser: User = {
+            uid: currentUser.uid,
+            name: currentUser.displayName || '',
+            email: currentUser.email || '',
+            role: 'user',
+            phone: currentUser.phoneNumber || '',
+          };
+          await setDoc(doc(db, 'users', currentUser.uid), newUser);
+          setUser(newUser);
         }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-        setAuthError('Authentication error occurred');
+      } else {
         setUser(null);
         setToken(null);
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -123,9 +90,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setLoading(true);
     setAuthError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Additional user data can be fetched here if needed
     } catch (error: any) {
-      console.error('Login error:', error);
       setAuthError(error.message || 'Failed to login');
       throw error;
     } finally {
@@ -133,15 +100,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, phoneNumber?: string) => {
     setLoading(true);
     setAuthError(null);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await createOrUpdateUserProfile(userCredential.user);
+      if (userCredential.user && phoneNumber) {
+        // Update user profile with phone number
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          name: userCredential.user.displayName || '',
+          email: userCredential.user.email || '',
+          role: 'user',
+          phone: phoneNumber,
+        });
+      } else if (userCredential.user) {
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          name: userCredential.user.displayName || '',
+          email: userCredential.user.email || '',
+          role: 'user',
+        });
+      }
     } catch (error: any) {
-      console.error('Signup error:', error);
-      setAuthError(error.message || 'Failed to signup');
+      setAuthError(error.message || 'Failed to sign up');
       throw error;
     } finally {
       setLoading(false);
@@ -153,10 +135,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAuthError(null);
     try {
       await signOut(auth);
-      setUser(null);
-      setToken(null);
     } catch (error: any) {
-      console.error('Logout error:', error);
       setAuthError(error.message || 'Failed to logout');
       throw error;
     } finally {
@@ -167,12 +146,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithGoogle = async () => {
     setLoading(true);
     setAuthError(null);
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      await createOrUpdateUserProfile(result.user);
+      const currentUser = result.user;
+
+      // Check if user data exists in Firestore
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (!userDoc.exists()) {
+        // Create user document if it doesn't exist
+        const newUser: User = {
+          uid: currentUser.uid,
+          name: currentUser.displayName || '',
+          email: currentUser.email || '',
+          role: 'user',
+          phone: currentUser.phoneNumber || '',
+        };
+        await setDoc(doc(db, 'users', currentUser.uid), newUser);
+      }
     } catch (error: any) {
-      console.error('Google sign-in error:', error);
       setAuthError(error.message || 'Failed to sign in with Google');
       throw error;
     } finally {

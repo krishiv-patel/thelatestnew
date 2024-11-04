@@ -2,13 +2,70 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import { FaGoogle } from 'react-icons/fa'; // Import Google Icon
+import { FaGoogle } from 'react-icons/fa';
+import ReactCountryFlag from 'react-country-flag'; // Import the flag component
+import Select, { components } from 'react-select'; // Import react-select
+import Button from './Button';
+
+interface CountryOption {
+  label: React.ReactNode;
+  value: string;
+}
+
+// Create the options for react-select
+const countryOptions: CountryOption[] = [
+  { label: <><ReactCountryFlag countryCode="US" svg style={{ marginRight: '8px' }} /> United States (+1)</>, value: '+1' },
+  { label: <><ReactCountryFlag countryCode="IN" svg style={{ marginRight: '8px' }} /> India (+91)</>, value: '+91' },
+  { label: <><ReactCountryFlag countryCode="GB" svg style={{ marginRight: '8px' }} /> United Kingdom (+44)</>, value: '+44' },
+  { label: <><ReactCountryFlag countryCode="AE" svg style={{ marginRight: '8px' }} /> United Arab Emirates (+971)</>, value: '+971' },
+  { label: <><ReactCountryFlag countryCode="SA" svg style={{ marginRight: '8px' }} /> Saudi Arabia (+966)</>, value: '+966' },
+  { label: <><ReactCountryFlag countryCode="CA" svg style={{ marginRight: '8px' }} /> Canada (+1)</>, value: '+1' },
+  { label: <><ReactCountryFlag countryCode="AU" svg style={{ marginRight: '8px' }} /> Australia (+61)</>, value: '+61' },
+  { label: <><ReactCountryFlag countryCode="KW" svg style={{ marginRight: '8px' }} /> Kuwait (+965)</>, value: '+965' },
+  { label: <><ReactCountryFlag countryCode="OM" svg style={{ marginRight: '8px' }} /> Oman (+968)</>, value: '+968' },
+  { label: <><ReactCountryFlag countryCode="QA" svg style={{ marginRight: '8px' }} /> Qatar (+974)</>, value: '+974' },
+  { label: <><ReactCountryFlag countryCode="SG" svg style={{ marginRight: '8px' }} /> Singapore (+65)</>, value: '+65' },
+  { label: <><ReactCountryFlag countryCode="MY" svg style={{ marginRight: '8px' }} /> Malaysia (+60)</>, value: '+60' },
+  { label: <><ReactCountryFlag countryCode="NP" svg style={{ marginRight: '8px' }} /> Nepal (+977)</>, value: '+977' },
+  { label: <><ReactCountryFlag countryCode="BH" svg style={{ marginRight: '8px' }} /> Bahrain (+973)</>, value: '+973' },
+  { label: <><ReactCountryFlag countryCode="ZA" svg style={{ marginRight: '8px' }} /> South Africa (+27)</>, value: '+27' },
+  { label: <><ReactCountryFlag countryCode="NZ" svg style={{ marginRight: '8px' }} /> New Zealand (+64)</>, value: '+64' },
+  { label: <><ReactCountryFlag countryCode="DE" svg style={{ marginRight: '8px' }} /> Germany (+49)</>, value: '+49' },
+  { label: <><ReactCountryFlag countryCode="FR" svg style={{ marginRight: '8px' }} /> France (+33)</>, value: '+33' },
+  { label: <><ReactCountryFlag countryCode="NL" svg style={{ marginRight: '8px' }} /> Netherlands (+31)</>, value: '+31' },
+  { label: <><ReactCountryFlag countryCode="IT" svg style={{ marginRight: '8px' }} /> Italy (+39)</>, value: '+39' },
+  { label: <><ReactCountryFlag countryCode="JP" svg style={{ marginRight: '8px' }} /> Japan (+81)</>, value: '+81' },
+  { label: <><ReactCountryFlag countryCode="BE" svg style={{ marginRight: '8px' }} /> Belgium (+32)</>, value: '+32' },
+  // Add more countries as needed
+];
+
+// Custom Option component to better display flags
+const CustomOption = (props: any) => (
+  <components.Option {...props}>
+    <div className="flex items-center">
+      {props.data.label.props.children[0]}
+      <span>{props.data.label.props.children.slice(1)}</span>
+    </div>
+  </components.Option>
+);
+
+// Custom SingleValue component to display flag in selected option
+const CustomSingleValue = (props: any) => (
+  <components.SingleValue {...props}>
+    <div className="flex items-center">
+      {props.data.label.props.children[0]}
+      <span>{props.data.label.props.children.slice(1)}</span>
+    </div>
+  </components.SingleValue>
+);
 
 export default function Signup() {
   const { signup, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(countryOptions[1]); // Default to India
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -17,7 +74,9 @@ export default function Signup() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      await signup(email, password);
+      // Combine country code with phone number before signup
+      const fullPhoneNumber = `${selectedCountry.value}${phoneNumber}`;
+      await signup(email, password, fullPhoneNumber);
       navigate('/profile'); // Redirect after successful signup
     } catch (error: any) {
       setErrorMessage(error.message || 'Failed to sign up');
@@ -101,16 +160,61 @@ export default function Signup() {
             </div>
           </div>
 
+          {/* Country Selector and Phone Number Input */}
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center space-x-2">
+              {/* Country Code Selector using react-select */}
+              <div className="w-32">
+                <Select
+                  value={selectedCountry}
+                  onChange={(selected) => setSelectedCountry(selected as CountryOption)}
+                  options={countryOptions}
+                  isDisabled={loading}
+                  isSearchable
+                  styles={{
+                    control: (provided) => ({
+                      ...provided,
+                      minHeight: '38px',
+                      borderColor: '#D1D5DB', // Tailwind gray-300
+                      boxShadow: 'none',
+                      '&:hover': {
+                        borderColor: '#10B981', // Tailwind green-500
+                      },
+                    }),
+                    option: (provided, state) => ({
+                      ...provided,
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                    }),
+                    singleValue: (provided) => ({
+                      ...provided,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }),
+                  }}
+                  components={{
+                    Option: CustomOption,
+                    SingleValue: CustomSingleValue,
+                  }}
+                />
+              </div>
+
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="1234567890"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
           <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
-                loading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200`}
-            >
+            <Button type="submit" isLoading={loading} disabled={loading}>
               {loading ? 'Signing up...' : 'Sign up'}
-            </button>
+            </Button>
           </div>
         </form>
 
@@ -138,16 +242,7 @@ export default function Signup() {
             </button>
           </div>
         </div>
-
-        <div className="text-sm text-center">
-          <Link
-            to="/login"
-            className="font-medium text-green-600 hover:text-green-700 transition-colors duration-200"
-          >
-            Already have an account? Login
-          </Link>
-        </div>
       </div>
     </div>
   );
-} 
+}
