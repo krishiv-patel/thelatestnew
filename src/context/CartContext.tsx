@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useNotification } from './NotificationContext';
 import { Product } from '../types/product';
-import { db } from '../firebase';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { onSnapshot } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { firestoreDB } from '../utils/firestore';
 
 interface CartItem extends Product {
   quantity: number;
@@ -34,112 +34,132 @@ interface CartProviderProps {
   children: ReactNode;
 }
 
+const SYNC_DEBOUNCE_MS = 2000;
+
 export const CartProvider = ({ children }: CartProviderProps) => {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(false);
+  const [syncTimeout, setSyncTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  const cartDocRef = user ? doc(db, 'carts', user.uid) : null;
-
-  // Fetch cart from Firestore on user login
   useEffect(() => {
-    if (user && cartDocRef) {
-      const unsubscribe = onSnapshot(cartDocRef, async (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const firestoreCart = docSnapshot.data().items as CartItem[];
-          const savedCart = localStorage.getItem('cart');
-          const localCart: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-          // Merge logic: Combine quantities for duplicate items
-          const mergedCartMap = new Map<number, CartItem>();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-          firestoreCart.forEach(item => mergedCartMap.set(item.id, { ...item }));
-          localCart.forEach(item => {
-            if (mergedCartMap.has(item.id)) {
-              const existingItem = mergedCartMap.get(item.id)!;
-              mergedCartMap.set(item.id, { ...existingItem, quantity: existingItem.quantity + item.quantity });
-            } else {
-              mergedCartMap.set(item.id, { ...item });
-            }
-          });
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
-          const mergedCart = Array.from(mergedCartMap.values());
-          setCartItems(mergedCart);
-          // Update Firestore with merged cart
-          try {
-            await updateDoc(cartDocRef, { items: mergedCart });
-          } catch (error) {
-            console.error('Error updating merged cart:', error);
-          }
-          // Clear localStorage after merging
-          localStorage.removeItem('cart');
-        } else {
-          // Initialize cart document if it doesn't exist
-          try {
-            await setDoc(cartDocRef, { items: [] });
-          } catch (error) {
-            console.error('Error initializing cart document:', error);
-          }
+  const debouncedSync = (items: CartItem[]) => {
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+    }
+
+    const timeout = setTimeout(async () => {
+      if (user && isOnline) {
+        try {
+          await firestoreDB.setDocument('carts', user.uid, { items }, { merge: true });
+          setSyncPending(false);
+        } catch (error) {
+          console.error('Error syncing cart:', error);
+          setSyncPending(true);
         }
-      });
-
-      return () => unsubscribe();
-    } else {
-      // If no user is logged in, load cart from localStorage
-      const savedCart = localStorage.getItem('cart');
-      if (savedCart) {
-        setCartItems(JSON.parse(savedCart));
-      } else {
-        setCartItems([]);
       }
-    }
-  }, [user, cartDocRef]);
+    }, SYNC_DEBOUNCE_MS);
 
-  // Update Firestore whenever cartItems change
+    setSyncTimeout(timeout);
+  };
+
   useEffect(() => {
-    if (user && cartDocRef) {
-      updateDoc(cartDocRef, { items: cartItems }).catch((error) => {
-        console.error('Error updating cart:', error);
-      });
-    } else {
-      // Sync with localStorage when no user is logged in
-      localStorage.setItem('cart', JSON.stringify(cartItems));
-    }
-  }, [cartItems, user, cartDocRef]);
+    const initializeCart = async () => {
+      const savedCart = localStorage.getItem('cart');
+      const localCart: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
 
-  // Load cart from Firestore or localStorage on initial load
+      if (user && isOnline) {
+        try {
+          const docSnapshot = await firestoreDB.getDocument('carts', user.uid);
+          
+          if (docSnapshot.exists()) {
+            const firestoreCart = docSnapshot.data().items as CartItem[];
+            const mergedCart = mergeLocalAndFirestoreCart(localCart, firestoreCart);
+            setCartItems(mergedCart);
+            localStorage.removeItem('cart');
+          } else {
+            await firestoreDB.setDocument('carts', user.uid, { items: localCart });
+            setCartItems(localCart);
+          }
+        } catch (error) {
+          console.error('Error initializing cart:', error);
+          setCartItems(localCart);
+          setSyncPending(true);
+        }
+      } else {
+        setCartItems(localCart);
+      }
+    };
+
+    initializeCart();
+
+    return () => {
+      if (syncTimeout) {
+        clearTimeout(syncTimeout);
+      }
+    };
+  }, [user, isOnline]);
+
+  const mergeLocalAndFirestoreCart = (localCart: CartItem[], firestoreCart: CartItem[]): CartItem[] => {
+    const mergedCartMap = new Map<number, CartItem>();
+    
+    firestoreCart.forEach(item => mergedCartMap.set(item.id, { ...item }));
+    localCart.forEach(item => {
+      if (mergedCartMap.has(item.id)) {
+        const existingItem = mergedCartMap.get(item.id)!;
+        mergedCartMap.set(item.id, {
+          ...existingItem,
+          quantity: existingItem.quantity + item.quantity
+        });
+      } else {
+        mergedCartMap.set(item.id, { ...item });
+      }
+    });
+
+    return Array.from(mergedCartMap.values());
+  };
+
   useEffect(() => {
-    if (user && cartDocRef) {
-      // Cart is already being handled by the onSnapshot listener
-      return;
+    if (user && isOnline && !syncPending) {
+      debouncedSync(cartItems);
     }
-
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-      setCartItems(JSON.parse(savedCart));
-    }
-  }, [user, cartDocRef]);
+    localStorage.setItem('cart', JSON.stringify(cartItems));
+  }, [cartItems, user, isOnline, syncPending]);
 
   const addToCart = (product: Product) => {
     setCartItems((prevItems) => {
       const existingItem = prevItems.find(item => item.id === product.id);
       
-      if (existingItem) { 
-        return prevItems.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      
-      return [...prevItems, { ...product, quantity: 1 }];
-    });
+      const updatedItems = existingItem
+        ? prevItems.map(item =>
+            item.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          )
+        : [...prevItems, { ...product, quantity: 1 }];
 
-    showNotification({
-      name: product.name,
-      image: product.image,
-      quantity: 1,
-      type: 'success'
+      showNotification({
+        name: product.name,
+        image: product.image,
+        quantity: 1,
+        type: 'success'
+      });
+
+      return updatedItems;
     });
   };
 
@@ -192,6 +212,13 @@ export const CartProvider = ({ children }: CartProviderProps) => {
       clearCart
     }}>
       {children}
+      {!isOnline && (
+        <div className="fixed bottom-4 right-4 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded shadow-lg">
+          <p className="text-yellow-700">
+            You're currently offline. Changes will sync when you're back online.
+          </p>
+        </div>
+      )}
     </CartContext.Provider>
   );
-}; 
+};
