@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -29,70 +30,72 @@ function App() {
       <NotificationProvider>
         <AuthProvider>
           <CartProvider>
-            <Router>
-              <div className="min-h-screen bg-white flex flex-col">
-                <Navbar />
-                <main className="flex-grow">
-                  <Suspense fallback={
-                    <div className="flex justify-center items-center min-h-screen">
-                      <LoadingSpinner size="large" />
-                    </div>
-                  }>
-                    <Routes>
-                      <Route
-                        path="/"
-                        element={
-                          <>
-                            <section id="home">
-                              <Hero />
-                            </section>
-                            <section id="features">
-                              <Features />
-                            </section>
-                            <section id="menu">
-                              <Menu />
-                            </section>
-                            <section id="contact">
-                              <Contact />
-                            </section>
-                          </>
-                        }
-                      />
-                      <Route
-                        path="/checkout"
-                        element={
-                          <ProtectedRoute>
-                            <Checkout />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route path="/login" element={<Login />} />
-                      <Route path="/signup" element={<Signup />} />
-                      <Route
-                        path="/admin"
-                        element={
-                          <ProtectedRoute adminOnly={true}>
-                            <AdminDashboard />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/profile"
-                        element={
-                          <ProtectedRoute>
-                            <Profile />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                      <Route path="/terms-conditions" element={<TermsConditions />} />
-                    </Routes>
-                  </Suspense>
-                </main>
-                <NetworkStatus />
-                <Footer />
-              </div>
-            </Router>
+            <GoogleReCaptchaProvider reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}>
+              <Router>
+                <div className="min-h-screen bg-white flex flex-col">
+                  <Navbar />
+                  <main className="flex-grow">
+                    <Suspense fallback={
+                      <div className="flex justify-center items-center min-h-screen">
+                        <LoadingSpinner size="large" />
+                      </div>
+                    }>
+                      <Routes>
+                        <Route
+                          path="/"
+                          element={
+                            <>
+                              <section id="home">
+                                <Hero />
+                              </section>
+                              <section id="features">
+                                <Features />
+                              </section>
+                              <section id="menu">
+                                <Menu />
+                              </section>
+                              <section id="contact">
+                                <Contact />
+                              </section>
+                            </>
+                          }
+                        />
+                        <Route
+                          path="/checkout"
+                          element={
+                            <ProtectedRoute>
+                              <Checkout />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/signup" element={<Signup />} />
+                        <Route
+                          path="/admin"
+                          element={
+                            <ProtectedRoute adminOnly={true}>
+                              <AdminDashboard />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/profile"
+                          element={
+                            <ProtectedRoute>
+                              <Profile />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                        <Route path="/terms-conditions" element={<TermsConditions />} />
+                      </Routes>
+                    </Suspense>
+                  </main>
+                  <NetworkStatus />
+                  <Footer />
+                </div>
+              </Router>
+            </GoogleReCaptchaProvider>
           </CartProvider>
         </AuthProvider>
       </NotificationProvider>
