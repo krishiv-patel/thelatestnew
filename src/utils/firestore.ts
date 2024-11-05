@@ -53,64 +53,120 @@ class RequestManager {
 const requestManager = new RequestManager();
 
 export const firestoreDB = {
-  async getDocument(collection: string, id: string) {
+  async createUserProfile(uid: string, email: string, userData: any) {
     await requestManager.throttle();
     try {
-      const docRef = doc(db, collection, id);
-      const result = await getDoc(docRef);
+      // Create user profile with UID
+      const userRef = doc(db, 'users', uid);
+      await setDoc(userRef, {
+        ...userData,
+        email: email.toLowerCase(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Create email lookup document
+      const emailLookupRef = doc(db, 'emailLookup', email.toLowerCase());
+      await setDoc(emailLookupRef, {
+        uid,
+        email: email.toLowerCase()
+      });
+
       requestManager.resetRetryCount();
-      return result;
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.getDocument(collection, id);
+        return this.createUserProfile(uid, email, userData);
       }
       throw error;
     }
   },
 
-  async setDocument(collection: string, id: string, data: any, options?: any) {
+  async getUserByEmail(email: string) {
     await requestManager.throttle();
     try {
-      const docRef = doc(db, collection, id);
-      await setDoc(docRef, data, options);
+      // Look up UID from email
+      const emailLookupRef = doc(db, 'emailLookup', email.toLowerCase());
+      const emailLookupDoc = await getDoc(emailLookupRef);
+
+      if (!emailLookupDoc.exists()) {
+        return null;
+      }
+
+      // Get user profile using UID
+      const uid = emailLookupDoc.data().uid;
+      const userRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userRef);
+
       requestManager.resetRetryCount();
+      return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } : null;
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.setDocument(collection, id, data, options);
+        return this.getUserByEmail(email);
       }
       throw error;
     }
   },
 
-  async updateDocument(collection: string, id: string, data: any) {
+  async updateUserProfile(uid: string, newData: any) {
     await requestManager.throttle();
     try {
-      const docRef = doc(db, collection, id);
-      await updateDoc(docRef, data);
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
+        ...newData,
+        updatedAt: new Date()
+      });
+
+      // If email is being updated, update the lookup document
+      if (newData.email) {
+        const oldEmailLookupRef = doc(db, 'emailLookup', newData.oldEmail.toLowerCase());
+        await setDoc(oldEmailLookupRef, { 
+          uid,
+          email: newData.email.toLowerCase()
+        });
+      }
+
       requestManager.resetRetryCount();
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.updateDocument(collection, id, data);
+        return this.updateUserProfile(uid, newData);
       }
       throw error;
     }
   },
 
-  async queryDocuments(collectionName: string, conditions: Array<{ field: string; operator: string; value: any }>) {
+  async createUserCard(uid: string, cardData: any) {
     await requestManager.throttle();
     try {
-      const collectionRef = collection(db, collectionName);
-      const constraints = conditions.map(({ field, operator, value }) => 
-        where(field, operator as any, value)
-      );
+      // Store card under user's UID with a unique card ID
+      const cardsRef = collection(db, 'users', uid, 'cards');
+      const cardDoc = doc(cardsRef);
+      await setDoc(cardDoc, {
+        ...cardData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      requestManager.resetRetryCount();
+      return cardDoc.id;
+    } catch (error: any) {
+      if (error.code === 'resource-exhausted') {
+        await requestManager.exponentialBackoff();
+        return this.createUserCard(uid, cardData);
+      }
+      throw error;
+    }
+  },
+
+  async getUserCards(uid: string) {
+    await requestManager.throttle();
+    try {
+      const cardsRef = collection(db, 'users', uid, 'cards');
+      const querySnapshot = await getDocs(cardsRef);
       
-      const q = query(collectionRef, ...constraints);
-      const querySnapshot = await getDocs(q);
       requestManager.resetRetryCount();
-      
       return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -118,7 +174,7 @@ export const firestoreDB = {
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.queryDocuments(collectionName, conditions);
+        return this.getUserCards(uid);
       }
       throw error;
     }
