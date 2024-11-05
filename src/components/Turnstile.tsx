@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 interface TurnstileProps {
   onSuccess: (token: string) => void;
+  onError?: () => void;
   action?: string;
 }
 
@@ -11,11 +12,18 @@ declare global {
   }
 }
 
-const Turnstile: React.FC<TurnstileProps> = ({ onSuccess, action = 'submit' }) => {
+const Turnstile: React.FC<TurnstileProps> = ({ onSuccess, onError, action = 'submit' }) => {
   const turnstileRef = useRef<HTMLDivElement>(null);
   const scriptLoadedRef = useRef<boolean>(false);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
   useEffect(() => {
+    if (!siteKey) {
+      console.error('Turnstile site key is not configured');
+      onError?.();
+      return;
+    }
+
     const loadTurnstile = () => {
       if (window.turnstile) {
         initializeTurnstile();
@@ -33,27 +41,36 @@ const Turnstile: React.FC<TurnstileProps> = ({ onSuccess, action = 'submit' }) =
     };
 
     const initializeTurnstile = () => {
-      if (turnstileRef.current) {
-        window.turnstile.render(turnstileRef.current, {
-          sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY,
-          action: action,
-          callback: onSuccess,
-          theme: 'light', // or 'dark'
-        });
+      if (turnstileRef.current && siteKey) {
+        try {
+          window.turnstile.render(turnstileRef.current, {
+            sitekey: siteKey,
+            action: action,
+            callback: onSuccess,
+            'error-callback': onError,
+            theme: 'light',
+          });
+        } catch (error) {
+          console.error('Error initializing Turnstile:', error);
+          onError?.();
+        }
       }
     };
 
     loadTurnstile();
 
-    // Cleanup on unmount
     return () => {
       if (window.turnstile && turnstileRef.current) {
         window.turnstile.reset(turnstileRef.current);
       }
     };
-  }, [onSuccess, action]);
+  }, [onSuccess, onError, action, siteKey]);
 
-  return <div ref={turnstileRef}></div>;
+  if (!siteKey) {
+    return null;
+  }
+
+  return <div ref={turnstileRef} className="flex justify-center"></div>;
 };
 
-export default Turnstile; 
+export default Turnstile;
