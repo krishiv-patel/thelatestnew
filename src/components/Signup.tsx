@@ -1,17 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Turnstile } from '@marsidev/react-turnstile';
-import { AlertCircle, Eye, EyeOff, CheckCircle, Loader } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { signupSchema, type SignupFormData } from '../schemas/auth';
-import SocialAuthButtons from './auth/SocialAuthButtons';
+import { Turnstile } from '@marsidev/react-turnstile';
 import PasswordStrengthIndicator from './auth/PasswordStrengthIndicator';
 import TwoFactorSetup from './auth/TwoFactorSetup';
 import Select from 'react-select';
 import ReactCountryFlag from 'react-country-flag';
+import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core';
+import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
+
+const options = {
+  translations: zxcvbnCommonPackage.translations,
+  graphs: zxcvbnCommonPackage.adjacencyGraphs,
+  dictionary: {
+    ...zxcvbnCommonPackage.dictionary,
+  },
+};
+
+zxcvbnOptions.setOptions(options);
+
+const countryOptions = [
+  { value: '+1', label: 'US', code: 'US' },
+  { value: '+44', label: 'UK', code: 'GB' },
+  { value: '+91', label: 'IN', code: 'IN' },
+  // Add more country options as needed
+].map(option => ({
+  value: option.value,
+  label: (
+    <div className="flex items-center">
+      <ReactCountryFlag
+        countryCode={option.code}
+        svg
+        className="mr-2"
+      />
+      {option.value}
+    </div>
+  )
+}));
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +49,8 @@ const Signup: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const [twoFactorSecret, setTwoFactorSecret] = useState('');
   const [verificationEmailSent, setVerificationEmailSent] = useState(false);
@@ -29,87 +60,154 @@ const Signup: React.FC = () => {
     handleSubmit,
     control,
     watch,
-    formState: { errors, isSubmitting, isValid, dirtyFields }
+    formState: { errors, isSubmitting, isValid, dirtyFields },
+    reset
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
     mode: 'onChange'
   });
 
   const password = watch('password', '');
+  const passwordStrength = password ? zxcvbn(password) : null;
+
+  const handleTurnstileSuccess = useCallback((token: string) => {
+    setTurnstileToken(token);
+    setError(null);
+  }, []);
+
+  const handleTurnstileError = useCallback(() => {
+    setError('Captcha verification failed. Please try again.');
+    setTurnstileToken(null);
+  }, []);
 
   const onSubmit = async (data: SignupFormData) => {
-    if (!captchaToken) {
-      alert('Please complete the CAPTCHA verification');
+    if (!turnstileToken) {
+      setError('Please complete the security check.');
+      return;
+    }
+
+    if (passwordStrength && passwordStrength.score < 3) {
+      setError('Please choose a stronger password.');
       return;
     }
 
     setIsLoading(true);
+    setError(null);
+
     try {
-      const { user, twoFactorSecret } = await signup({ ...data, captchaToken });
-      
-      if (twoFactorSecret) {
-        setTwoFactorSecret(twoFactorSecret);
-        setShowTwoFactorSetup(true);
+      const response = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token: turnstileToken })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const { user, twoFactorSecret: secret } = await signup({
+          ...data,
+          captchaToken: turnstileToken
+        });
+
+        if (secret) {
+          setTwoFactorSecret(secret);
+          setShowTwoFactorSetup(true);
+        } else {
+          setVerificationEmailSent(true);
+          reset();
+          setTimeout(() => {
+            navigate('/login');
+          }, 5000);
+        }
       } else {
-        setVerificationEmailSent(true);
-        setTimeout(() => {
-          navigate('/login');
-        }, 5000);
+        setError('Security verification failed. Please try again.');
       }
     } catch (error: any) {
+      setError(error.message || 'An error occurred during signup.');
       console.error('Signup error:', error);
-      alert(error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleSocialSignup = async (provider: 'google' | 'microsoft') => {
     try {
-      await signInWithGoogle();
-      navigate('/profile');
-    } catch (error) {
-      console.error('Google sign-in error:', error);
-    }
-  };
-
-  const handleMicrosoftSignIn = async () => {
-    try {
-      await signInWithMicrosoft();
-      navigate('/profile');
-    } catch (error) {
-      console.error('Microsoft sign-in error:', error);
+      setIsLoading(true);
+      setError(null);
+      await (provider === 'google' ? signInWithGoogle() : signInWithMicrosoft());
+      navigate('/dashboard');
+    } catch (error: any) {
+      setError(error.message || `${provider} signup failed.`);
+      console.error(`${provider} signup error:`, error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleTwoFactorVerification = async (code: string) => {
     try {
+      setIsLoading(true);
+      setError(null);
+      // Verify 2FA code with backend
+      await fetch('/api/verify-2fa', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      });
+
       setVerificationEmailSent(true);
       setTimeout(() => {
         navigate('/login');
       }, 5000);
-    } catch (error) {
+    } catch (error: any) {
+      setError(error.message || 'Failed to verify 2FA code.');
       console.error('2FA verification error:', error);
-      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8"
+    >
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
+            Already have an account?{' '}
             <Link to="/login" className="font-medium text-green-600 hover:text-green-500">
-              sign in to your existing account
+              Sign in
             </Link>
           </p>
         </div>
 
         <AnimatePresence mode="wait">
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="rounded-md bg-red-50 p-4"
+            >
+              <div className="flex">
+                <AlertCircle className="h-5 w-5 text-red-400" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {verificationEmailSent ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -118,7 +216,7 @@ const Signup: React.FC = () => {
               className="rounded-md bg-green-50 p-4"
             >
               <div className="flex">
-                <CheckCircle className="h-5 w-5 text-green-400" aria-hidden="true" />
+                <CheckCircle className="h-5 w-5 text-green-400" />
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-green-800">
                     Verification email sent
@@ -138,6 +236,8 @@ const Signup: React.FC = () => {
               <TwoFactorSetup
                 secretKey={twoFactorSecret}
                 onVerify={handleTwoFactorVerification}
+                isLoading={isLoading}
+                error={error}
               />
             </motion.div>
           ) : (
@@ -156,8 +256,14 @@ const Signup: React.FC = () => {
                     <input
                       id="name"
                       type="text"
+                      autoComplete="name"
                       {...register('name')}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                      className={`mt-1 block w-full rounded-md shadow-sm ${
+                        errors.name
+                          ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                          : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      disabled={isLoading}
                     />
                     {errors.name && (
                       <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
@@ -174,7 +280,12 @@ const Signup: React.FC = () => {
                       type="email"
                       autoComplete="email"
                       {...register('email')}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                      className={`mt-1 block w-full rounded-md shadow-sm ${
+                        errors.email
+                          ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                          : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      disabled={isLoading}
                     />
                     {errors.email && (
                       <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -191,12 +302,18 @@ const Signup: React.FC = () => {
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         {...register('password')}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10"
+                        className={`mt-1 block w-full rounded-md shadow-sm ${
+                          errors.password
+                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                            : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                        }`}
+                        disabled={isLoading}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        tabIndex={-1}
                       >
                         {showPassword ? (
                           <EyeOff className="h-5 w-5 text-gray-400" />
@@ -221,12 +338,18 @@ const Signup: React.FC = () => {
                         id="confirmPassword"
                         type={showConfirmPassword ? 'text' : 'password'}
                         {...register('confirmPassword')}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10"
+                        className={`mt-1 block w-full rounded-md shadow-sm ${
+                          errors.confirmPassword
+                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                            : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                        }`}
+                        disabled={isLoading}
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        tabIndex={-1}
                       >
                         {showConfirmPassword ? (
                           <EyeOff className="h-5 w-5 text-gray-400" />
@@ -252,19 +375,28 @@ const Signup: React.FC = () => {
                         render={({ field }) => (
                           <Select
                             {...field}
-                            options={[
-                              { value: '+1', label: <><ReactCountryFlag countryCode="US" svg /> +1</> },
-                              { value: '+44', label: <><ReactCountryFlag countryCode="GB" svg /> +44</> },
-                              { value: '+91', label: <><ReactCountryFlag countryCode="IN" svg /> +91</> },
-                            ]}
+                            options={countryOptions}
                             className="w-32"
+                            isDisabled={isLoading}
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                borderTopRightRadius: 0,
+                                borderBottomRightRadius: 0,
+                              }),
+                            }}
                           />
                         )}
                       />
                       <input
                         type="tel"
                         {...register('phoneNumber')}
-                        className="flex-1 min-w-0 block rounded-none rounded-r-md border-gray-300 focus:border-green-500 focus:ring-green-500"
+                        className={`flex-1 min-w-0 block rounded-none rounded-r-md ${
+                          errors.phoneNumber
+                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                            : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                        }`}
+                        disabled={isLoading}
                       />
                     </div>
                     {errors.phoneNumber && (
@@ -278,7 +410,12 @@ const Signup: React.FC = () => {
                       id="acceptTerms"
                       type="checkbox"
                       {...register('acceptTerms')}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      className={`h-4 w-4 rounded ${
+                        errors.acceptTerms
+                          ? 'border-red-300 text-red-600 focus:ring-red-500'
+                          : 'border-gray-300 text-green-600 focus:ring-green-500'
+                      }`}
+                      disabled={isLoading}
                     />
                     <label htmlFor="acceptTerms" className="ml-2 block text-sm text-gray-900">
                       I accept the{' '}
@@ -292,32 +429,34 @@ const Signup: React.FC = () => {
                   )}
                 </div>
 
-                {/* CAPTCHA */}
+                {/* Turnstile */}
                 <div className="flex justify-center">
                   <Turnstile
                     siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                    onSuccess={(token: string) => setCaptchaToken(token)}
+                    onSuccess={handleTurnstileSuccess}
+                    onError={handleTurnstileError}
                     options={{
                       theme: 'light',
-                      // Add other options if necessary
                     }}
                   />
                 </div>
 
                 {/* Submit Button */}
-                <div>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !isValid || !captchaToken}
-                    className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? (
-                      <Loader className="animate-spin h-5 w-5" />
-                    ) : (
-                      'Sign up'
-                    )}
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !isValid || isLoading || !turnstileToken}
+                  className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                    isLoading || !isValid || !turnstileToken
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
+                  }`}
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin h-5 w-5" />
+                  ) : (
+                    'Sign up'
+                  )}
+                </button>
               </form>
 
               <div className="mt-6">
@@ -326,23 +465,48 @@ const Signup: React.FC = () => {
                     <div className="w-full border-t border-gray-300" />
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-gray-50 text-gray-500">Or continue with</span>
+                    <span className="px-2 bg-gray-50 text-gray-500">
+                      Or continue with
+                    </span>
                   </div>
                 </div>
-
-                <div className="mt-6">
-                  <SocialAuthButtons
-                    onGoogleSignIn={handleGoogleSignIn}
-                    onMicrosoftSignIn={handleMicrosoftSignIn}
-                    isLoading={isLoading}
-                  />
                 </div>
-              </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleSocialSignup('google')}
+                    disabled={isLoading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Sign up with Google</span>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
+                      />
+                    </svg>
+                  </button>
+
+                  <button
+                    onClick={() => handleSocialSignup('microsoft')}
+                    disabled={isLoading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="sr-only">Sign up with Microsoft</span>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
