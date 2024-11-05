@@ -9,9 +9,9 @@ import {
   signInWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
-  ConfirmationResult,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { sendEmailVerification } from 'firebase/auth';
 
 interface User {
   uid: string;
@@ -30,7 +30,7 @@ interface AuthContextType {
   signup: (email: string, password: string, phoneNumber?: string) => Promise<void>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
+  signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<any>;
   authError: string | null;
 }
 
@@ -44,38 +44,33 @@ export const useAuth = (): AuthContextType => {
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider = ({ children }: AuthProviderProps) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const token = await currentUser.getIdToken();
-        setToken(token);
-
-        // Fetch user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const uid = firebaseUser.uid;
+        const userDoc = await getDoc(doc(db, 'users', uid));
         if (userDoc.exists()) {
           setUser(userDoc.data() as User);
         } else {
-          // Create a new user document if it doesn't exist
+          // If user document doesn't exist, create one
           const newUser: User = {
-            uid: currentUser.uid,
-            name: currentUser.displayName || '',
-            email: currentUser.email || '',
+            uid: uid,
+            name: firebaseUser.displayName || '',
+            email: firebaseUser.email || '',
             role: 'user',
-            phone: currentUser.phoneNumber || '',
+            phone: firebaseUser.phoneNumber || '',
           };
-          await setDoc(doc(db, 'users', currentUser.uid), newUser);
+          await setDoc(doc(db, 'users', uid), newUser);
           setUser(newUser);
         }
+        const token = await firebaseUser.getIdToken();
+        setToken(token);
       } else {
         setUser(null);
         setToken(null);
@@ -90,9 +85,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setLoading(true);
     setAuthError(null);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Additional user data can be fetched here if needed
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
+      console.error('Login error:', error);
       setAuthError(error.message || 'Failed to login');
       throw error;
     } finally {
@@ -105,25 +100,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAuthError(null);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      if (userCredential.user && phoneNumber) {
-        // Update user profile with phone number
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          name: userCredential.user.displayName || '',
-          email: userCredential.user.email || '',
-          role: 'user',
-          phone: phoneNumber,
-        });
-      } else if (userCredential.user) {
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          name: userCredential.user.displayName || '',
-          email: userCredential.user.email || '',
-          role: 'user',
-        });
+      const currentUser = userCredential.user;
+
+      // Send email verification
+      await sendEmailVerification(currentUser);
+
+      const userEmail = currentUser.email?.toLowerCase();
+      if (!userEmail) {
+        throw new Error('No email associated with this account.');
       }
+
+      const newUser: User = {
+        uid: userCredential.user.uid,
+        name: currentUser.displayName || '',
+        email: userEmail,
+        role: 'user',
+        phone: phoneNumber || currentUser.phoneNumber || '',
+      };
+
+      await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
+      setUser(newUser);
     } catch (error: any) {
-      setAuthError(error.message || 'Failed to sign up');
+      console.error('Signup error:', error);
+      setAuthError(error.message || 'Failed to signup');
       throw error;
     } finally {
       setLoading(false);
@@ -136,6 +135,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await signOut(auth);
     } catch (error: any) {
+      console.error('Logout error:', error);
       setAuthError(error.message || 'Failed to logout');
       throw error;
     } finally {
@@ -146,25 +146,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithGoogle = async () => {
     setLoading(true);
     setAuthError(null);
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const currentUser = result.user;
-
-      // Check if user data exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      if (!userDoc.exists()) {
-        // Create user document if it doesn't exist
-        const newUser: User = {
-          uid: currentUser.uid,
-          name: currentUser.displayName || '',
-          email: currentUser.email || '',
-          role: 'user',
-          phone: currentUser.phoneNumber || '',
-        };
-        await setDoc(doc(db, 'users', currentUser.uid), newUser);
-      }
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (error: any) {
+      console.error('Google Sign-In error:', error);
       setAuthError(error.message || 'Failed to sign in with Google');
       throw error;
     } finally {

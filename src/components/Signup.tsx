@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { FaGoogle } from 'react-icons/fa';
-import ReactCountryFlag from 'react-country-flag'; // Import the flag component
-import Select, { components } from 'react-select'; // Import react-select
+import ReactCountryFlag from 'react-country-flag';
+import Select, { components } from 'react-select';
 import Button from './Button';
 
 interface CountryOption {
@@ -12,31 +12,10 @@ interface CountryOption {
   value: string;
 }
 
-// Create the options for react-select
 const countryOptions: CountryOption[] = [
   { label: <><ReactCountryFlag countryCode="US" svg style={{ marginRight: '8px' }} /> United States (+1)</>, value: '+1' },
   { label: <><ReactCountryFlag countryCode="IN" svg style={{ marginRight: '8px' }} /> India (+91)</>, value: '+91' },
-  { label: <><ReactCountryFlag countryCode="GB" svg style={{ marginRight: '8px' }} /> United Kingdom (+44)</>, value: '+44' },
-  { label: <><ReactCountryFlag countryCode="AE" svg style={{ marginRight: '8px' }} /> United Arab Emirates (+971)</>, value: '+971' },
-  { label: <><ReactCountryFlag countryCode="SA" svg style={{ marginRight: '8px' }} /> Saudi Arabia (+966)</>, value: '+966' },
-  { label: <><ReactCountryFlag countryCode="CA" svg style={{ marginRight: '8px' }} /> Canada (+1)</>, value: '+1' },
-  { label: <><ReactCountryFlag countryCode="AU" svg style={{ marginRight: '8px' }} /> Australia (+61)</>, value: '+61' },
-  { label: <><ReactCountryFlag countryCode="KW" svg style={{ marginRight: '8px' }} /> Kuwait (+965)</>, value: '+965' },
-  { label: <><ReactCountryFlag countryCode="OM" svg style={{ marginRight: '8px' }} /> Oman (+968)</>, value: '+968' },
-  { label: <><ReactCountryFlag countryCode="QA" svg style={{ marginRight: '8px' }} /> Qatar (+974)</>, value: '+974' },
-  { label: <><ReactCountryFlag countryCode="SG" svg style={{ marginRight: '8px' }} /> Singapore (+65)</>, value: '+65' },
-  { label: <><ReactCountryFlag countryCode="MY" svg style={{ marginRight: '8px' }} /> Malaysia (+60)</>, value: '+60' },
-  { label: <><ReactCountryFlag countryCode="NP" svg style={{ marginRight: '8px' }} /> Nepal (+977)</>, value: '+977' },
-  { label: <><ReactCountryFlag countryCode="BH" svg style={{ marginRight: '8px' }} /> Bahrain (+973)</>, value: '+973' },
-  { label: <><ReactCountryFlag countryCode="ZA" svg style={{ marginRight: '8px' }} /> South Africa (+27)</>, value: '+27' },
-  { label: <><ReactCountryFlag countryCode="NZ" svg style={{ marginRight: '8px' }} /> New Zealand (+64)</>, value: '+64' },
-  { label: <><ReactCountryFlag countryCode="DE" svg style={{ marginRight: '8px' }} /> Germany (+49)</>, value: '+49' },
-  { label: <><ReactCountryFlag countryCode="FR" svg style={{ marginRight: '8px' }} /> France (+33)</>, value: '+33' },
-  { label: <><ReactCountryFlag countryCode="NL" svg style={{ marginRight: '8px' }} /> Netherlands (+31)</>, value: '+31' },
-  { label: <><ReactCountryFlag countryCode="IT" svg style={{ marginRight: '8px' }} /> Italy (+39)</>, value: '+39' },
-  { label: <><ReactCountryFlag countryCode="JP" svg style={{ marginRight: '8px' }} /> Japan (+81)</>, value: '+81' },
-  { label: <><ReactCountryFlag countryCode="BE" svg style={{ marginRight: '8px' }} /> Belgium (+32)</>, value: '+32' },
-  // Add more countries as needed
+  // ... other countries
 ];
 
 // Custom Option component to better display flags
@@ -64,7 +43,7 @@ export default function Signup() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(countryOptions[1]); // Default to India
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(countryOptions[0]); // Default to first country
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -73,10 +52,12 @@ export default function Signup() {
     e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
+
     try {
       // Combine country code with phone number before signup
       const fullPhoneNumber = `${selectedCountry.value}${phoneNumber}`;
       await signup(email, password, fullPhoneNumber);
+      alert('A verification email has been sent to your email address. Please verify to continue.');
       navigate('/profile'); // Redirect after successful signup
     } catch (error: any) {
       setErrorMessage(error.message || 'Failed to sign up');
@@ -90,40 +71,28 @@ export default function Signup() {
     setErrorMessage(null);
     try {
       await signInWithGoogle();
-      navigate('/profile'); // Redirect after successful Google signup
+      navigate('/profile');
     } catch (error: any) {
-      if (error.code === 'auth/popup-blocked') {
-        setErrorMessage('Popup was blocked. Please allow popups for this site and try again.');
-      } else {
-        setErrorMessage(error.message || 'Failed to sign up with Google');
-      }
+      setErrorMessage(error.message || 'Failed to sign up with Google');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
         </div>
-
         {errorMessage && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4" role="alert">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-red-400" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{errorMessage}</p>
-              </div>
-            </div>
+          <div className="flex items-center text-red-600">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            <span>{errorMessage}</span>
           </div>
         )}
-
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
@@ -142,28 +111,10 @@ export default function Signup() {
                 disabled={loading}
               />
             </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                disabled={loading}
-              />
-            </div>
-          </div>
 
-          {/* Country Selector and Phone Number Input */}
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center space-x-2">
-              {/* Country Code Selector using react-select */}
+            {/* Country Selector and Phone Number Input */}
+            <div className="flex items-center space-x-2 mt-4">
+              {/* Country Selector using react-select */}
               <div className="w-32">
                 <Select
                   value={selectedCountry}
@@ -206,6 +157,24 @@ export default function Signup() {
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="1234567890"
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
                 disabled={loading}
               />
             </div>

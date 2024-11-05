@@ -4,19 +4,17 @@ import { useNavigate, Link } from 'react-router-dom';
 import { RecaptchaVerifier } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AlertCircle } from 'lucide-react';
-import { FaGoogle } from 'react-icons/fa'; // Import Google Icon
+import { FaGoogle } from 'react-icons/fa';
 import Button from './Button';
 import Spinner from './Spinner';
-import ReactCountryFlag from 'react-country-flag'; // Import the flag component
-import Select, { components } from 'react-select'; // Import react-select
-
+import ReactCountryFlag from 'react-country-flag';
+import Select, { components } from 'react-select';
 declare global {
   interface Window {
     recaptchaVerifier: RecaptchaVerifier;
   }
 }
 
-// Define the shape of a country option
 interface CountryOption {
   label: React.ReactNode;
   value: string;
@@ -49,7 +47,6 @@ const countryOptions: CountryOption[] = [
   // Add more countries as needed
 ];
 
-// Custom Option component to better display flags
 const CustomOption = (props: any) => (
   <components.Option {...props}>
     <div className="flex items-center">
@@ -59,7 +56,6 @@ const CustomOption = (props: any) => (
   </components.Option>
 );
 
-// Custom SingleValue component to display flag in selected option
 const CustomSingleValue = (props: any) => (
   <components.SingleValue {...props}>
     <div className="flex items-center">
@@ -70,45 +66,27 @@ const CustomSingleValue = (props: any) => (
 );
 
 export default function Login() {
-  const { login, signInWithGoogle, signInWithPhone, authError } = useAuth();
+  const { signInWithPhone } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(countryOptions[1]); // Default to India
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(countryOptions[0]);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      await login(email, password);
-      navigate('/profile');
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Failed to login');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      await signInWithGoogle();
-      navigate('/profile');
-    } catch (error: any) {
-      if (error.code === 'auth/popup-blocked') {
-        setErrorMessage('Popup was blocked. Please allow popups for this site and try again.');
-      } else {
-        setErrorMessage(error.message || 'Failed to sign in with Google');
-      }
-    } finally {
-      setLoading(false);
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
+        'siteKey': '6Lcg3HQqAAAAALqDRDRx8UlQrCruaZcWEi74anwY', // Your Site Key
+        'size': 'invisible',
+        'callback': (response: any) => {
+          console.log('reCAPTCHA solved');
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+        },
+      }, auth);
     }
   };
 
@@ -116,20 +94,7 @@ export default function Login() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-          callback: (response: any) => {
-            // reCAPTCHA solved, allow signInWithPhoneNumber.
-            console.log('reCAPTCHA resolved');
-          },
-          'expired-callback': () => {
-            // Response expired. Ask user to solve reCAPTCHA again.
-            console.log('reCAPTCHA expired');
-          },
-        });
-      }
-      // Combine country code with phone number
+      setupRecaptcha();
       const fullPhoneNumber = `${selectedCountry.value}${phoneNumber}`;
       const confirmation = await signInWithPhone(fullPhoneNumber, window.recaptchaVerifier);
       setConfirmationResult(confirmation);
@@ -165,95 +130,16 @@ export default function Login() {
             Sign in to your account
           </h2>
         </div>
-
-        {(authError || errorMessage) && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4" role="alert">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-red-400" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">
-                  {authError || errorMessage}
-                </p>
-              </div>
-            </div>
+        {errorMessage && (
+          <div className="flex items-center text-red-600">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            <span>{errorMessage}</span>
           </div>
         )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {/* Email and Password Fields */}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email-address" className="sr-only">
-                Email address
-              </label>
-              <input
-                type="email"
-                id="email-address"
-                name="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                disabled={loading}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Button type="submit" isLoading={loading} disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign in'}
-            </Button>
-          </div>
-        </form>
-
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className={`w-full flex items-center justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors ${
-                loading ? 'cursor-not-allowed' : ''
-              }`}
-            >
-              {/* Google Logo */}
-              <FaGoogle className="w-5 h-5 mr-2" aria-hidden="true" />
-              Sign in with Google
-            </button>
-          </div>
-
-          <div className="mt-6">
+        <div>
+          <div className="flex flex-col space-y-4">
             <div className="flex items-center space-x-2">
-              {/* Country Code Selector using react-select */}
+              {/* Country Selector using react-select */}
               <div className="w-32">
                 <Select
                   value={selectedCountry}
@@ -297,6 +183,7 @@ export default function Login() {
                 placeholder="1234567890"
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
                 disabled={loading}
+                required
               />
               <button
                 type="button"
