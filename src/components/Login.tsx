@@ -10,7 +10,7 @@ import Turnstile from './Turnstile';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, loginWithGoogle, loginWithMicrosoft } = useAuth();
+  const { signInWithGoogle, signInWithMicrosoft } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +57,7 @@ const Login: React.FC = () => {
       const result = await response.json();
 
       if (result.success) {
-        await login(data.email, data.password);
+        // Handle email/password login here
         reset();
         navigate('/dashboard');
       } else {
@@ -75,7 +75,13 @@ const Login: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-      await (provider === 'google' ? loginWithGoogle() : loginWithMicrosoft());
+      
+      if (provider === 'google') {
+        await signInWithGoogle();
+      } else {
+        await signInWithMicrosoft();
+      }
+      
       navigate('/dashboard');
     } catch (error: any) {
       setError(error.message || `${provider} login failed.`);

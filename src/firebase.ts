@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getFunctions } from 'firebase/functions';
 
@@ -20,10 +20,27 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+
+// Initialize Auth with custom settings
 export const auth = getAuth(app);
-export const db = initializeFirestore(app, {
-    cacheSizeBytes: CACHE_SIZE_UNLIMITED, // Adjust as needed
+auth.useDeviceLanguage();
+
+// Initialize providers with custom scopes
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+
+export const microsoftProvider = new OAuthProvider('microsoft.com');
+microsoftProvider.addScope('user.read');
+microsoftProvider.setCustomParameters({
+    prompt: 'select_account'
 });
-const functions = getFunctions(app);
+
+// Initialize Firestore with custom settings
+export const db = initializeFirestore(app, {
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+});
+
+export const functions = getFunctions(app);
 
 export default app;
