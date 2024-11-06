@@ -52,6 +52,39 @@ class RequestManager {
 
 const requestManager = new RequestManager();
 
+interface UserProfile {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  preferences?: Record<string, any>;
+  settings?: Record<string, any>;
+  updatedAt: Date;
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+  price: number;
+  selectedOptions?: Record<string, any>;
+}
+
+interface Cart {
+  userId: string;
+  items: CartItem[];
+  updatedAt: Date;
+}
+
+interface Order {
+  orderId: string;
+  userId: string;
+  items: CartItem[];
+  totalAmount: number;
+  paymentMethod: 'cod' | 'online';
+  status: 'placed' | 'processed' | 'shipped' | 'delivered';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export const firestoreDB = {
   async createUserProfile(email: string, userData: any) {
     await requestManager.throttle();
@@ -91,7 +124,6 @@ export const firestoreDB = {
   async getUserByEmail(email: string) {
     await requestManager.throttle();
     try {
-      // Fetch user profile using email
       const userRef = doc(db, 'users', email.toLowerCase());
       const userDoc = await getDoc(userRef);
 
@@ -110,16 +142,13 @@ export const firestoreDB = {
     }
   },
 
-  async updateUserProfile(email: string, newData: any) {
+  async updateUserProfile(email: string, newData: Partial<UserProfile>) {
     await requestManager.throttle();
     try {
       const userRef = doc(db, 'users', email.toLowerCase());
       await updateDoc(userRef, {
         ...newData,
         updatedAt: new Date(),
-        // Update advanced parameters as needed
-        ...newData.preferences && { preferences: newData.preferences },
-        ...newData.settings && { settings: newData.settings }
       });
 
       requestManager.resetRetryCount();
@@ -132,44 +161,95 @@ export const firestoreDB = {
     }
   },
 
-  async createUserCard(uid: string, cardData: any) {
+  async createUserCart(userId: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      // Store card under user's UID with a unique card ID
-      const cardsRef = collection(db, 'users', uid, 'cards');
-      const cardDoc = doc(cardsRef);
-      await setDoc(cardDoc, {
-        ...cardData,
-        createdAt: new Date(),
-        updatedAt: new Date()
+      const cartRef = doc(collection(db, 'users', userId, 'cart'));
+      await setDoc(cartRef, {
+        ...cartData,
+        updatedAt: new Date(),
       });
 
       requestManager.resetRetryCount();
-      return cardDoc.id;
+      return cartRef.id;
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.createUserCard(uid, cardData);
+        return this.createUserCart(userId, cartData);
       }
       throw error;
     }
   },
 
-  async getUserCards(uid: string) {
+  async updateUserCart(userId: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      const cardsRef = collection(db, 'users', uid, 'cards');
-      const querySnapshot = await getDocs(cardsRef);
-      
+      const cartRef = doc(db, 'users', userId, 'cart', 'current');
+      await updateDoc(cartRef, {
+        ...cartData,
+        updatedAt: new Date(),
+      });
+
       requestManager.resetRetryCount();
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.getUserCards(uid);
+        return this.updateUserCart(userId, cartData);
+      }
+      throw error;
+    }
+  },
+
+  async getUserCart(userId: string): Promise<Cart | null> {
+    try {
+      const cartRef = doc(db, 'users', userId, 'cart', 'current');
+      const cartSnap = await getDoc(cartRef);
+      if (cartSnap.exists()) {
+        return cartSnap.data() as Cart;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching user cart:', error);
+      throw error;
+    }
+  },
+
+  async createOrder(orderData: Partial<Order>) {
+    await requestManager.throttle();
+    try {
+      const ordersRef = collection(db, 'orders');
+      const orderDoc = doc(ordersRef);
+      await setDoc(orderDoc, {
+        ...orderData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      requestManager.resetRetryCount();
+      return orderDoc.id;
+    } catch (error: any) {
+      if (error.code === 'resource-exhausted') {
+        await requestManager.exponentialBackoff();
+        return this.createOrder(orderData);
+      }
+      throw error;
+    }
+  },
+
+  async updateOrderStatus(orderId: string, status: Order['status']) {
+    await requestManager.throttle();
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, {
+        status,
+        updatedAt: new Date(),
+      });
+
+      requestManager.resetRetryCount();
+    } catch (error: any) {
+      if (error.code === 'resource-exhausted') {
+        await requestManager.exponentialBackoff();
+        return this.updateOrderStatus(orderId, status);
       }
       throw error;
     }
