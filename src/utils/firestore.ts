@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 // Rate limiting configuration with exponential backoff
 const RATE_LIMIT = {
@@ -161,12 +161,15 @@ export const firestoreDB = {
     }
   },
 
-  async createUserCart(userId: string, cartData: Partial<Cart>) {
+  // Cart Collection Methods
+
+  async createCart(userId: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      const cartRef = doc(collection(db, 'users', userId, 'cart'));
+      const cartRef = doc(collection(db, 'carts'));
       await setDoc(cartRef, {
         ...cartData,
+        userId,
         updatedAt: new Date(),
       });
 
@@ -175,16 +178,16 @@ export const firestoreDB = {
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.createUserCart(userId, cartData);
+        return this.createCart(userId, cartData);
       }
       throw error;
     }
   },
 
-  async updateUserCart(userId: string, cartData: Partial<Cart>) {
+  async updateCart(cartId: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      const cartRef = doc(db, 'users', userId, 'cart', 'current');
+      const cartRef = doc(db, 'carts', cartId);
       await updateDoc(cartRef, {
         ...cartData,
         updatedAt: new Date(),
@@ -194,19 +197,23 @@ export const firestoreDB = {
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.updateUserCart(userId, cartData);
+        return this.updateCart(cartId, cartData);
       }
       throw error;
     }
   },
 
-  async getUserCart(userId: string): Promise<Cart | null> {
+  async getCartByUserId(userId: string): Promise<Cart | null> {
     try {
-      const cartRef = doc(db, 'users', userId, 'cart', 'current');
-      const cartSnap = await getDoc(cartRef);
-      if (cartSnap.exists()) {
-        return cartSnap.data() as Cart;
+      const cartsCollection = collection(db, 'carts');
+      const q = query(cartsCollection, where('userId', '==', userId), limit(1));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const cartDoc = querySnapshot.docs[0];
+        return cartDoc.data() as Cart;
       }
+
       return null;
     } catch (error) {
       console.error('Error fetching user cart:', error);

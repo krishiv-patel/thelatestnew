@@ -1,8 +1,8 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingCart, Trash2, Plus, Minus } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCart } from '../../context/CartContext';
-import { Link } from 'react-router-dom';
+import { ShoppingCart, X } from 'react-feather';
+import { useNavigate } from 'react-router-dom';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface CartDrawerProps {
 
 export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { cartItems, removeFromCart, increaseQuantity, decreaseQuantity, getTotalItems, getTotalPrice } = useCart();
+  const navigate = useNavigate();
 
   const formatter = new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -105,39 +106,29 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                       exit={{ opacity: 0, y: -20 }}
                       className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm"
                     >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-20 h-20 object-cover rounded-md"
-                      />
+                      <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-lg" />
                       <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{item.name}</h3>
-                        <p className="text-sm text-gray-500">{formatter.format(item.price)}</p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <button
-                            onClick={() => decreaseQuantity(item.id)}
-                            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="h-4 w-4" />
+                        <h4 className="text-md font-semibold">{item.name}</h4>
+                        <p className="text-sm text-gray-600">{formatter.format(item.price)} each</p>
+                        <div className="mt-2 flex items-center space-x-2">
+                          <button onClick={() => decreaseQuantity(item.id)} className="px-2 py-1 bg-gray-200 rounded">
+                            -
                           </button>
-                          <span className="w-8 text-center">{item.quantity}</span>
-                          <button
-                            onClick={() => increaseQuantity(item.id)}
-                            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="h-4 w-4" />
+                          <span>{item.quantity}</span>
+                          <button onClick={() => increaseQuantity(item.id)} className="px-2 py-1 bg-gray-200 rounded">
+                            +
                           </button>
                         </div>
                       </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="p-2 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors"
-                        aria-label="Remove item"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                      <div className="flex flex-col items-end">
+                        <p className="text-gray-900">{formatter.format(item.price * item.quantity)}</p>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="text-red-600 hover:text-red-800 mt-2"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </motion.div>
                   ))}
                 </div>
@@ -146,26 +137,17 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
 
             {/* Footer */}
             {cartItems.length > 0 && (
-              <div className="border-t p-4 space-y-4">
-                <div className="flex items-center justify-between font-medium">
-                  <span>Total</span>
-                  <span>{formatter.format(getTotalPrice())}</span>
+              <div className="p-4 border-t">
+                <div className="flex justify-between mb-4">
+                  <span className="font-semibold">Total:</span>
+                  <span className="font-semibold">{formatter.format(getTotalPrice())}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                  >
-                    Continue Shopping
-                  </button>
-                  <Link
-                    to="/checkout"
-                    onClick={onClose}
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors text-center"
-                  >
-                    Checkout
-                  </Link>
-                </div>
+                <button
+                  onClick={() => navigate('/checkout')}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-md"
+                >
+                  Proceed to Checkout
+                </button>
               </div>
             )}
           </motion.div>

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Checkout() {
-  const { cartItems, removeFromCart, increaseQuantity, decreaseQuantity, getTotalItems } = useCart();
+  const { cartItems, removeFromCart, increaseQuantity, decreaseQuantity, getTotalItems, getTotalPrice } = useCart();
   const { user, token } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -16,7 +16,7 @@ export default function Checkout() {
     paymentMethod: 'cod', // 'cod' or 'online'
   });
 
-  const totalPrice = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  const totalPrice = getTotalPrice();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -130,7 +130,7 @@ export default function Checkout() {
                   autoComplete="name"
                 />
               </div>
-              {/* Email Address */}
+              {/* Email */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                   Email Address
@@ -146,7 +146,7 @@ export default function Checkout() {
                   autoComplete="email"
                 />
               </div>
-              {/* Phone Number */}
+              {/* Phone */}
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
                   Phone Number
@@ -162,20 +162,19 @@ export default function Checkout() {
                   autoComplete="tel"
                 />
               </div>
-              {/* Delivery Address */}
+              {/* Address */}
               <div>
                 <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                  Delivery Address
+                  Shipping Address
                 </label>
                 <textarea
                   name="address"
                   id="address"
-                  rows={3}
                   value={formData.address}
                   onChange={handleChange}
                   required
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
-                  autoComplete="street-address"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                  rows={4}
                 ></textarea>
               </div>
               {/* Delivery Method */}

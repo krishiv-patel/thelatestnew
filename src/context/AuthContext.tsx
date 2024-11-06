@@ -202,13 +202,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           providers: Array.from(providers),
           ...(additionalData.preferences && { preferences: additionalData.preferences }),
           ...(additionalData.settings && { settings: additionalData.settings }),
-          ...additionalData.roles && { roles: additionalData.roles },
-          ...additionalData.twoFactorAuth && { twoFactorAuth: additionalData.twoFactorAuth }
+          ...(additionalData.roles && { roles: additionalData.roles }),
+          ...(additionalData.twoFactorAuth && { twoFactorAuth: additionalData.twoFactorAuth })
         });
       }
     } catch (error) {
-      console.error('Error creating/updating user document:', error);
-      throw error;
+      console.error('Error creating or updating user document:', error);
     }
   };
 
