@@ -27,11 +27,11 @@ const ProtectedRoute = React.lazy(() => import('./components/ProtectedRoute'));
 function App() {
   return (
     <ErrorBoundary>
-      <NotificationProvider>
-        <CartProvider>
-          <GoogleReCaptchaProvider reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}>
-            <Router>
-              <AuthProvider>
+      <Router>
+        <AuthProvider>
+          <NotificationProvider>
+            <CartProvider>
+              <GoogleReCaptchaProvider reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}>
                 <div className="min-h-screen bg-white flex flex-col">
                   <Navbar />
                   <main className="flex-grow">
@@ -94,11 +94,11 @@ function App() {
                   <NetworkStatus />
                   <Footer />
                 </div>
-              </AuthProvider>
-            </Router>
-          </GoogleReCaptchaProvider>
-        </CartProvider>
-      </NotificationProvider>
+              </GoogleReCaptchaProvider>
+            </CartProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </Router>
     </ErrorBoundary>
   );
 }
