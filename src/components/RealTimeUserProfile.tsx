@@ -8,7 +8,7 @@ const RealTimeUserProfile: React.FC = () => {
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
-      const unsubscribe = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+      const unsubscribe = onSnapshot(doc(db, "users", user.email.toLowerCase()), (docSnap) => {
         if (docSnap.exists()) {
           setEmail(docSnap.get("email"));
         }

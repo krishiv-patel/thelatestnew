@@ -9,7 +9,7 @@ export const batchWriteDocuments = async (dataArray: Array<{id: string, data: an
   const batch = writeBatch(db);
   
   dataArray.forEach(item => {
-    const docRef = doc(db, "collectionName", item.id);
+    const docRef = doc(db, "users", item.id);
     batch.set(docRef, item.data);
   });
 
@@ -19,11 +19,11 @@ export const batchWriteDocuments = async (dataArray: Array<{id: string, data: an
 
 /**
  * Updates user data only if changes are detected.
- * @param uid User's UID.
+ * @param email User's email.
  * @param newData New data to update.
  */
-export const updateUserIfChanged = async (uid: string, newData: any) => {
-  const userRef = doc(db, "users", uid);
+export const updateUserIfChanged = async (email: string, newData: any) => {
+  const userRef = doc(db, "users", email.toLowerCase());
   const userSnap = await getDoc(userRef);
   
   if (userSnap.exists()) {
@@ -43,11 +43,11 @@ export const updateUserIfChanged = async (uid: string, newData: any) => {
 
 /**
  * Fetches only the email field of a user.
- * @param uid User's UID.
+ * @param email User's email.
  * @returns User's email or null.
  */
-export const getUserEmail = async (uid: string): Promise<string | null> => {
-  const userRef = doc(getFirestore(), "users", uid);
+export const getUserEmail = async (email: string): Promise<string | null> => {
+  const userRef = doc(getFirestore(), "users", email.toLowerCase());
   const userSnap = await getDoc(userRef);
   if (userSnap.exists()) {
     return userSnap.get("email");
@@ -86,11 +86,11 @@ export const fetchUsersPaginated = async (lastDoc: DocumentSnapshot | null = nul
 
 /**
  * Deletes a user document.
- * @param uid User's UID.
+ * @param email User's email.
  */
-export const deleteUserDocument = async (uid: string) => {
+export const deleteUserDocument = async (email: string) => {
   try {
-    await deleteDoc(doc(db, "users", uid));
+    await deleteDoc(doc(db, "users", email.toLowerCase()));
     console.log("User document deleted.");
   } catch (error) {
     console.error("Error deleting user document:", error);

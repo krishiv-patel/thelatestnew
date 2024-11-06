@@ -53,30 +53,36 @@ class RequestManager {
 const requestManager = new RequestManager();
 
 export const firestoreDB = {
-  async createUserProfile(uid: string, email: string, userData: any) {
+  async createUserProfile(email: string, userData: any) {
     await requestManager.throttle();
     try {
-      // Create user profile with UID
-      const userRef = doc(db, 'users', uid);
+      const userRef = doc(db, 'users', email.toLowerCase());
       await setDoc(userRef, {
         ...userData,
         email: email.toLowerCase(),
         createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      // Create email lookup document
-      const emailLookupRef = doc(db, 'emailLookup', email.toLowerCase());
-      await setDoc(emailLookupRef, {
-        uid,
-        email: email.toLowerCase()
+        updatedAt: new Date(),
+        preferences: userData.preferences || {
+          theme: "light",
+          notifications: true
+        },
+        settings: userData.settings || {
+          language: "en",
+          privacy: "medium"
+        },
+        roles: userData.roles || ['user'],
+        twoFactorAuth: {
+          enabled: false,
+          secret: ""
+        },
+        lastLogin: userData.lastLogin || new Date()
       });
 
       requestManager.resetRetryCount();
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.createUserProfile(uid, email, userData);
+        return this.createUserProfile(email, userData);
       }
       throw error;
     }
@@ -85,21 +91,16 @@ export const firestoreDB = {
   async getUserByEmail(email: string) {
     await requestManager.throttle();
     try {
-      // Look up UID from email
-      const emailLookupRef = doc(db, 'emailLookup', email.toLowerCase());
-      const emailLookupDoc = await getDoc(emailLookupRef);
+      // Fetch user profile using email
+      const userRef = doc(db, 'users', email.toLowerCase());
+      const userDoc = await getDoc(userRef);
 
-      if (!emailLookupDoc.exists()) {
+      if (!userDoc.exists()) {
         return null;
       }
 
-      // Get user profile using UID
-      const uid = emailLookupDoc.data().uid;
-      const userRef = doc(db, 'users', uid);
-      const userDoc = await getDoc(userRef);
-
       requestManager.resetRetryCount();
-      return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } : null;
+      return { id: userDoc.id, ...userDoc.data() };
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
@@ -109,29 +110,23 @@ export const firestoreDB = {
     }
   },
 
-  async updateUserProfile(uid: string, newData: any) {
+  async updateUserProfile(email: string, newData: any) {
     await requestManager.throttle();
     try {
-      const userRef = doc(db, 'users', uid);
+      const userRef = doc(db, 'users', email.toLowerCase());
       await updateDoc(userRef, {
         ...newData,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        // Update advanced parameters as needed
+        ...newData.preferences && { preferences: newData.preferences },
+        ...newData.settings && { settings: newData.settings }
       });
-
-      // If email is being updated, update the lookup document
-      if (newData.email) {
-        const oldEmailLookupRef = doc(db, 'emailLookup', newData.oldEmail.toLowerCase());
-        await setDoc(oldEmailLookupRef, { 
-          uid,
-          email: newData.email.toLowerCase()
-        });
-      }
 
       requestManager.resetRetryCount();
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.updateUserProfile(uid, newData);
+        return this.updateUserProfile(email, newData);
       }
       throw error;
     }

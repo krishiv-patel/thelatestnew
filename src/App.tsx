@@ -28,10 +28,10 @@ function App() {
   return (
     <ErrorBoundary>
       <NotificationProvider>
-        <AuthProvider>
-          <CartProvider>
-            <GoogleReCaptchaProvider reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}>
-              <Router>
+        <CartProvider>
+          <GoogleReCaptchaProvider reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}>
+            <Router>
+              <AuthProvider>
                 <div className="min-h-screen bg-white flex flex-col">
                   <Navbar />
                   <main className="flex-grow">
@@ -94,10 +94,10 @@ function App() {
                   <NetworkStatus />
                   <Footer />
                 </div>
-              </Router>
-            </GoogleReCaptchaProvider>
-          </CartProvider>
-        </AuthProvider>
+              </AuthProvider>
+            </Router>
+          </GoogleReCaptchaProvider>
+        </CartProvider>
       </NotificationProvider>
     </ErrorBoundary>
   );
