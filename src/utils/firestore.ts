@@ -1,5 +1,13 @@
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  onSnapshot,
+  DocumentData
+} from 'firebase/firestore';
 
 // Rate limiting configuration with exponential backoff
 const RATE_LIMIT = {
@@ -66,17 +74,23 @@ interface CartItem {
   quantity: number;
   price: number;
   selectedOptions?: Record<string, any>;
+  discountApplied?: string;
+  notes?: string;
 }
 
 interface Cart {
-  userId: string;
+  email: string;
   items: CartItem[];
+  totalAmount: number;
   updatedAt: Date;
+  shippingAddress?: string;
+  paymentMethod?: 'cod' | 'online';
+  deliveryStatus?: 'pending' | 'shipped' | 'delivered';
 }
 
 interface Order {
   orderId: string;
-  userId: string;
+  email: string;
   items: CartItem[];
   totalAmount: number;
   paymentMethod: 'cod' | 'online';
@@ -157,20 +171,27 @@ export const firestoreDB = {
         await requestManager.exponentialBackoff();
         return this.updateUserProfile(email, newData);
       }
+      console.error('Error updating user profile:', error);
       throw error;
     }
   },
 
-  // Cart Collection Methods
-
-  async createCart(userId: string, cartData: Partial<Cart>) {
+  async createCart(email: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      const cartRef = doc(collection(db, 'carts'));
+      const cartRef = doc(db, 'carts', email.toLowerCase());
+      const totalAmount = cartData.items
+        ? cartData.items.reduce((total, item) => total + item.price * item.quantity, 0)
+        : 0;
+
       await setDoc(cartRef, {
         ...cartData,
-        userId,
+        email: email.toLowerCase(),
+        totalAmount,
         updatedAt: new Date(),
+        shippingAddress: cartData.shippingAddress || '',
+        paymentMethod: cartData.paymentMethod || 'cod',
+        deliveryStatus: cartData.deliveryStatus || 'pending',
       });
 
       requestManager.resetRetryCount();
@@ -178,40 +199,50 @@ export const firestoreDB = {
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.createCart(userId, cartData);
+        return this.createCart(email, cartData);
       }
+      console.error('Error creating cart:', error);
       throw error;
     }
   },
 
-  async updateCart(cartId: string, cartData: Partial<Cart>) {
+  // Update Cart
+  async updateCart(email: string, cartData: Partial<Cart>) {
     await requestManager.throttle();
     try {
-      const cartRef = doc(db, 'carts', cartId);
+      const cartRef = doc(db, 'carts', email.toLowerCase());
+      const totalAmount = cartData.items
+        ? cartData.items.reduce((total, item) => total + item.price * item.quantity, 0)
+        : 0;
+
       await updateDoc(cartRef, {
         ...cartData,
+        totalAmount,
         updatedAt: new Date(),
+        ...(cartData.shippingAddress && { shippingAddress: cartData.shippingAddress }),
+        ...(cartData.paymentMethod && { paymentMethod: cartData.paymentMethod }),
+        ...(cartData.deliveryStatus && { deliveryStatus: cartData.deliveryStatus }),
       });
 
       requestManager.resetRetryCount();
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
-        return this.updateCart(cartId, cartData);
+        return this.updateCart(email, cartData);
       }
+      console.error('Error updating cart:', error);
       throw error;
     }
   },
 
-  async getCartByUserId(userId: string): Promise<Cart | null> {
+  // Get Cart by User Email
+  async getCartByUserEmail(email: string): Promise<Cart | null> {
     try {
-      const cartsCollection = collection(db, 'carts');
-      const q = query(cartsCollection, where('userId', '==', userId), limit(1));
-      const querySnapshot = await getDocs(q);
+      const cartRef = doc(db, 'carts', email.toLowerCase());
+      const cartSnap = await getDoc(cartRef);
 
-      if (!querySnapshot.empty) {
-        const cartDoc = querySnapshot.docs[0];
-        return cartDoc.data() as Cart;
+      if (cartSnap.exists()) {
+        return cartSnap.data() as Cart;
       }
 
       return null;
@@ -221,6 +252,7 @@ export const firestoreDB = {
     }
   },
 
+  // Create Order
   async createOrder(orderData: Partial<Order>) {
     await requestManager.throttle();
     try {
@@ -239,10 +271,12 @@ export const firestoreDB = {
         await requestManager.exponentialBackoff();
         return this.createOrder(orderData);
       }
+      console.error('Error creating order:', error);
       throw error;
     }
   },
 
+  // Update Order Status
   async updateOrderStatus(orderId: string, status: Order['status']) {
     await requestManager.throttle();
     try {
@@ -258,7 +292,29 @@ export const firestoreDB = {
         await requestManager.exponentialBackoff();
         return this.updateOrderStatus(orderId, status);
       }
+      console.error('Error updating order status:', error);
       throw error;
     }
-  }
+  },
+
+  // Real-time listener for cart updates
+  listenToCartUpdates(email: string, callback: (cart: Cart | null) => void) {
+    const cartRef = doc(db, 'carts', email.toLowerCase());
+    return onSnapshot(
+      cartRef,
+      (snap) => {
+        if (snap.exists()) {
+          callback(snap.data() as Cart);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        console.error('Error listening to cart updates:', error);
+        callback(null);
+      }
+    );
+  },
 };
+
+export default firestoreDB;

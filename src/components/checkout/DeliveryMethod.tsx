@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Zap, Clock } from 'lucide-react';
+import { useDeliveryContext } from '../../context/DeliveryContext';
 
 const deliveryOptions = [
   {
@@ -29,12 +30,21 @@ const deliveryOptions = [
   },
 ];
 
-export default function DeliveryMethod() {
+const DeliveryMethod = () => {
   const navigate = useNavigate();
-  const [selectedMethod, setSelectedMethod] = React.useState(deliveryOptions[0].id);
+  const { selectedMethod, setSelectedMethod } = useDeliveryContext();
+
+  useEffect(() => {
+    // Load from localStorage if available
+    const savedMethod = localStorage.getItem('selectedDeliveryMethod');
+    if (savedMethod) {
+      setSelectedMethod(savedMethod);
+    }
+  }, [setSelectedMethod]);
 
   const handleContinue = () => {
-    // Save delivery method to context/storage
+    // Save to localStorage
+    localStorage.setItem('selectedDeliveryMethod', selectedMethod);
     navigate('/checkout/payment');
   };
 
@@ -107,4 +117,6 @@ export default function DeliveryMethod() {
       </div>
     </div>
   );
-}
+};
+
+export default DeliveryMethod;

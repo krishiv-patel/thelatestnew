@@ -59,7 +59,7 @@ const Login: React.FC = () => {
       if (result.success) {
         // Handle email/password login here
         reset();
-        navigate('/dashboard');
+        navigate('/profile');
       } else {
         setError('Security verification failed. Please try again.');
       }
@@ -82,7 +82,7 @@ const Login: React.FC = () => {
         await signInWithMicrosoft();
       }
       
-      navigate('/dashboard');
+      navigate('/profile');
     } catch (error: any) {
       setError(error.message || `${provider} login failed.`);
       console.error(`${provider} login error:`, error);

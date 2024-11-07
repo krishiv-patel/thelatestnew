@@ -9,6 +9,9 @@ import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import Profile from './components/Profile';
+import UserProfile from './components/UserProfile';
+import { ROUTES } from '../constants/routes';
 
 // Lazy load components
 const Hero = React.lazy(() => import('./components/Hero'));
@@ -19,7 +22,6 @@ const Checkout = React.lazy(() => import('./components/Checkout'));
 const Login = React.lazy(() => import('./components/Login'));
 const Signup = React.lazy(() => import('./components/Signup'));
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
-const Profile = React.lazy(() => import('./components/Profile'));
 const PrivacyPolicy = React.lazy(() => import('./components/PrivacyPolicy'));
 const TermsConditions = React.lazy(() => import('./components/TermsConditions'));
 const ProtectedRoute = React.lazy(() => import('./components/ProtectedRoute'));
@@ -78,14 +80,7 @@ function App() {
                             </ProtectedRoute>
                           }
                         />
-                        <Route
-                          path="/profile"
-                          element={
-                            <ProtectedRoute>
-                              <Profile />
-                            </ProtectedRoute>
-                          }
-                        />
+                        <Route path="/profile" element={<Profile />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/terms-conditions" element={<TermsConditions />} />
                       </Routes>

@@ -13,6 +13,7 @@ import Select from 'react-select';
 import ReactCountryFlag from 'react-country-flag';
 import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core';
 import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
+import { ROUTES } from '../constants/routes';
 
 const options = {
   translations: zxcvbnCommonPackage.translations,
@@ -118,7 +119,7 @@ const Signup: React.FC = () => {
           setVerificationEmailSent(true);
           reset();
           setTimeout(() => {
-            navigate('/login');
+            navigate('/profile');
           }, 5000);
         }
       } else {
@@ -137,7 +138,7 @@ const Signup: React.FC = () => {
       setIsLoading(true);
       setError(null);
       await (provider === 'google' ? signInWithGoogle() : signInWithMicrosoft());
-      navigate('/dashboard');
+      navigate('/profile');
     } catch (error: any) {
       setError(error.message || `${provider} signup failed.`);
       console.error(`${provider} signup error:`, error);

@@ -193,7 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const result = await signInWithPopup(auth, googleProvider);
       await createOrUpdateUserDocument(result.user);
-      navigate('/dashboard');
+      navigate('/profile');
     } catch (error: any) {
       handleAuthError(error);
     } finally {
@@ -207,7 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null);
       const result = await signInWithPopup(auth, microsoftProvider);
       await createOrUpdateUserDocument(result.user);
-      navigate('/dashboard');
+      navigate('/profile');
     } catch (error: any) {
       handleAuthError(error);
     } finally {

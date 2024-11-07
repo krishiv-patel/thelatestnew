@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useNotification } from './NotificationContext';
 import { Product } from '../types/product';
+import firestoreDB, { CartItem as FirestoreCartItem } from '../utils/firestore';
+import { useAuth } from './AuthContext';
 
 interface CartItem extends Product {
   quantity: number;
@@ -8,10 +10,11 @@ interface CartItem extends Product {
 
 interface CartContextType {
   cartItems: CartItem[];
+  totalAmount: number;
   addToCart: (product: Product) => void;
-  removeFromCart: (id: number) => void;
-  increaseQuantity: (id: number) => void;
-  decreaseQuantity: (id: number) => void;
+  removeFromCart: (productId: string) => void;
+  increaseQuantity: (productId: string) => void;
+  decreaseQuantity: (productId: string) => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
   clearCart: () => void;
@@ -21,9 +24,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const useCart = () => {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
+  if (!context) throw new Error('useCart must be used within CartProvider');
   return context;
 };
 
@@ -31,110 +32,353 @@ interface CartProviderProps {
   children: ReactNode;
 }
 
-export const CartProvider = ({ children }: CartProviderProps) => {
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
-    const savedCart = localStorage.getItem('cart');
-    return savedCart ? JSON.parse(savedCart) : [];
+// Helper functions
+const calculateTotalAmount = (items: CartItem[]): number => {
+  return items.reduce((total, item) => total + item.price * item.quantity, 0);
+};
+
+const mergeLocalAndFirestoreCart = (localCart: CartItem[], firestoreCartItems: CartItem[]): CartItem[] => {
+  const mergedCartMap: { [key: string]: CartItem } = {};
+
+  localCart.forEach(item => {
+    mergedCartMap[item.productId] = { ...item };
   });
-  
+
+  firestoreCartItems.forEach(item => {
+    if (mergedCartMap[item.productId]) {
+      mergedCartMap[item.productId].quantity += item.quantity;
+    } else {
+      mergedCartMap[item.productId] = { ...item };
+    }
+  });
+
+  return Object.values(mergedCartMap);
+};
+
+export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+
   const { showNotification } = useNotification();
+  const { user, userProfile } = useAuth();
 
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [syncPending, setSyncPending] = useState<boolean>(false);
+  const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
+
+  // Handle online/offline status
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cartItems));
-  }, [cartItems]);
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Sync local cart with Firestore when back online
+      syncLocalCartWithFirestore();
+    };
 
-  const addToCart = (product: Product) => {
-    setCartItems(prevItems => {
-      const existingItem = prevItems.find(item => item.id === product.id);
-      
-      if (existingItem) {
-        const updatedItems = prevItems.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-        
-        showNotification({
-          name: product.name,
-          image: product.image,
-          quantity: existingItem.quantity + 1,
-          type: 'success'
-        });
-        
-        return updatedItems;
+    const handleOffline = () => {
+      setIsOnline(false);
+      showNotification('You are offline. Changes will sync when you are back online.', 'warning');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [showNotification]);
+
+  const syncLocalCartWithFirestore = async () => {
+    if (user && user.email) {
+      const savedCart = localStorage.getItem('cart');
+      const localCart: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
+
+      try {
+        const firestoreCart = await firestoreDB.getCartByUserEmail(user.email);
+
+        if (firestoreCart) {
+          const mergedCart = mergeLocalAndFirestoreCart(localCart, firestoreCart.items);
+          const newTotal = calculateTotalAmount(mergedCart);
+          await firestoreDB.updateCart(user.email, { items: mergedCart, totalAmount: newTotal });
+          setCartItems(mergedCart);
+          setTotalAmount(newTotal);
+          localStorage.removeItem('cart');
+        } else {
+          const total = calculateTotalAmount(localCart);
+          await firestoreDB.createCart(user.email, { items: localCart, totalAmount: total });
+          setCartItems(localCart);
+          setTotalAmount(total);
+          localStorage.removeItem('cart');
+        }
+
+        showNotification('Cart synchronized successfully.', 'success');
+      } catch (error) {
+        console.error('Error syncing cart:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
       }
-      
-      showNotification({
-        name: product.name,
-        image: product.image,
-        quantity: 1,
-        type: 'success'
-      });
-      
-      return [...prevItems, { ...product, quantity: 1 }];
-    });
+    }
   };
 
-  const removeFromCart = (id: number) => {
-    setCartItems(prevItems => {
-      const itemToRemove = prevItems.find(item => item.id === id);
-      if (itemToRemove) {
-        showNotification({
-          name: itemToRemove.name,
-          image: itemToRemove.image,
-          quantity: 0,
-          type: 'error'
-        });
-      }
-      return prevItems.filter(item => item.id !== id);
-    });
-  };
+  const addToCart = async (product: Product) => {
+    if (!user || !user.email) {
+      showNotification('Please log in to add items to your cart.', 'error');
+      return;
+    }
 
-  const increaseQuantity = (id: number) => {
-    setCartItems(prevItems =>
-      prevItems.map(item =>
-        item.id === id
+    const existingItem = cartItems.find(item => item.productId === product.id);
+
+    let updatedCart: CartItem[];
+
+    if (existingItem) {
+      updatedCart = cartItems.map(item =>
+        item.productId === product.id
           ? { ...item, quantity: item.quantity + 1 }
           : item
-      )
-    );
+      );
+    } else {
+      updatedCart = [...cartItems, { ...product, quantity: 1 }];
+    }
+
+    setCartItems(updatedCart);
+    const newTotal = calculateTotalAmount(updatedCart);
+    setTotalAmount(newTotal);
+
+    if (isOnline) {
+      try {
+        await firestoreDB.updateCart(user.email, { items: updatedCart, totalAmount: newTotal });
+        showNotification('Item added to cart.', 'success');
+      } catch (error) {
+        console.error('Error adding to cart:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
+      }
+    } else {
+      // Save to localStorage for offline
+      localStorage.setItem('cart', JSON.stringify(updatedCart));
+      showNotification('Item added to cart (offline).', 'warning');
+    }
   };
 
-  const decreaseQuantity = (id: number) => {
-    setCartItems(prevItems => {
-      const updatedItems = prevItems.map(item =>
-        item.id === id && item.quantity > 1
+  const removeFromCart = async (productId: string) => {
+    if (!user || !user.email) {
+      showNotification('Please log in to modify your cart.', 'error');
+      return;
+    }
+
+    const updatedCart = cartItems.filter(item => item.productId !== productId);
+    setCartItems(updatedCart);
+    const newTotal = calculateTotalAmount(updatedCart);
+    setTotalAmount(newTotal);
+
+    if (isOnline) {
+      try {
+        await firestoreDB.updateCart(user.email, { items: updatedCart, totalAmount: newTotal });
+        showNotification('Item removed from cart.', 'success');
+      } catch (error) {
+        console.error('Error removing from cart:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
+      }
+    } else {
+      // Save to localStorage for offline
+      localStorage.setItem('cart', JSON.stringify(updatedCart));
+      showNotification('Item removed from cart (offline).', 'warning');
+    }
+  };
+
+  const increaseQuantity = async (productId: string) => {
+    if (!user || !user.email) {
+      showNotification('Please log in to modify your cart.', 'error');
+      return;
+    }
+
+    const updatedCart = cartItems.map(item =>
+      item.productId === productId
+        ? { ...item, quantity: item.quantity + 1 }
+        : item
+    );
+    setCartItems(updatedCart);
+    const newTotal = calculateTotalAmount(updatedCart);
+    setTotalAmount(newTotal);
+
+    if (isOnline) {
+      try {
+        await firestoreDB.updateCart(user.email, { items: updatedCart, totalAmount: newTotal });
+        showNotification('Item quantity increased.', 'success');
+      } catch (error) {
+        console.error('Error increasing quantity:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
+      }
+    } else {
+      // Save to localStorage for offline
+      localStorage.setItem('cart', JSON.stringify(updatedCart));
+      showNotification('Item quantity increased (offline).', 'warning');
+    }
+  };
+
+  const decreaseQuantity = async (productId: string) => {
+    if (!user || !user.email) {
+      showNotification('Please log in to modify your cart.', 'error');
+      return;
+    }
+
+    const existingItem = cartItems.find(item => item.productId === productId);
+    if (!existingItem) return;
+
+    let updatedCart: CartItem[];
+
+    if (existingItem.quantity > 1) {
+      updatedCart = cartItems.map(item =>
+        item.productId === productId
           ? { ...item, quantity: item.quantity - 1 }
           : item
       );
-      return updatedItems.filter(item => item.quantity > 0);
-    });
+    } else {
+      updatedCart = cartItems.filter(item => item.productId !== productId);
+    }
+
+    setCartItems(updatedCart);
+    const newTotal = calculateTotalAmount(updatedCart);
+    setTotalAmount(newTotal);
+
+    if (isOnline) {
+      try {
+        await firestoreDB.updateCart(user.email, { items: updatedCart, totalAmount: newTotal });
+        showNotification('Item quantity decreased.', 'success');
+      } catch (error) {
+        console.error('Error decreasing quantity:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
+      }
+    } else {
+      // Save to localStorage for offline
+      localStorage.setItem('cart', JSON.stringify(updatedCart));
+      showNotification('Item quantity decreased (offline).', 'warning');
+    }
   };
 
-  const getTotalItems = () => {
+  const getTotalItems = (): number => {
     return cartItems.reduce((total, item) => total + item.quantity, 0);
   };
 
-  const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
+  const getTotalPrice = (): number => {
+    return totalAmount;
   };
 
-  const clearCart = () => {
+  const clearCart = async () => {
+    if (!user || !user.email) {
+      showNotification('Please log in to clear your cart.', 'error');
+      return;
+    }
+
     setCartItems([]);
+    setTotalAmount(0);
+
+    if (isOnline) {
+      try {
+        await firestoreDB.updateCart(user.email, { items: [], totalAmount: 0 });
+        showNotification('Cart has been cleared.', 'success');
+      } catch (error) {
+        console.error('Error clearing cart:', error);
+        setSyncPending(true);
+        showNotification('Unable to sync cart changes. They will be retried automatically.', 'error');
+      }
+    } else {
+      // Clear localStorage for offline
+      localStorage.removeItem('cart');
+      showNotification('Cart has been cleared (offline).', 'warning');
+    }
   };
+
+  // Initialize cart with real-time listener
+  useEffect(() => {
+    const initializeCart = async () => {
+      if (user && user.email) {
+        try {
+          // Set up real-time listener
+          const unsubscribeFn = firestoreDB.listenToCartUpdates(user.email, (cart) => {
+            if (cart) {
+              setCartItems(cart.items);
+              setTotalAmount(cart.totalAmount);
+              localStorage.removeItem('cart');
+            } else {
+              setCartItems([]);
+              setTotalAmount(0);
+            }
+          });
+
+          setUnsubscribe(() => unsubscribeFn);
+
+          // Fetch local cart
+          const savedCart = localStorage.getItem('cart');
+          const localCart: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
+
+          const firestoreCart = await firestoreDB.getCartByUserEmail(user.email);
+
+          if (firestoreCart) {
+            const mergedCart = mergeLocalAndFirestoreCart(localCart, firestoreCart.items);
+            const newTotal = calculateTotalAmount(mergedCart);
+            await firestoreDB.updateCart(user.email, { items: mergedCart, totalAmount: newTotal });
+            setCartItems(mergedCart);
+            setTotalAmount(newTotal);
+            localStorage.removeItem('cart');
+          } else {
+            const total = calculateTotalAmount(localCart);
+            await firestoreDB.createCart(user.email, { items: localCart, totalAmount: total });
+            setCartItems(localCart);
+            setTotalAmount(total);
+          }
+        } catch (error) {
+          console.error('Error initializing cart:', error);
+          setCartItems([]);
+          setTotalAmount(0);
+        }
+      }
+    };
+
+    initializeCart();
+  }, [user]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [unsubscribe]);
 
   return (
-    <CartContext.Provider value={{
-      cartItems,
-      addToCart,
-      removeFromCart,
-      increaseQuantity,
-      decreaseQuantity,
-      getTotalItems,
-      getTotalPrice,
-      clearCart
-    }}>
+    <CartContext.Provider
+      value={{
+        cartItems,
+        totalAmount,
+        addToCart,
+        removeFromCart,
+        increaseQuantity,
+        decreaseQuantity,
+        getTotalItems,
+        getTotalPrice,
+        clearCart,
+      }}
+    >
       {children}
+      {!isOnline && (
+        <div className="fixed bottom-4 right-4 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded shadow-lg">
+          <p className="text-yellow-700">
+            You're currently offline. Changes will sync when you're back online.
+          </p>
+        </div>
+      )}
+      {syncPending && (
+        <div className="fixed bottom-4 left-4 bg-red-100 border-l-4 border-red-500 p-4 rounded shadow-lg">
+          <p className="text-red-700">
+            Unable to sync cart changes. They will be retried automatically.
+          </p>
+        </div>
+      )}
     </CartContext.Provider>
   );
 };
+
+export default CartProvider;  

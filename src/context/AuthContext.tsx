@@ -320,4 +320,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
+
+  const AuthProvider: React.FC = ({ children }) => {
+    const navigate = useNavigate();
+    // ... other state and functions
+  
+    const signInWithGoogle = async () => {
+      try {
+        // ... sign-in logic
+        navigate('/profile'); // Ensure redirect to /profile
+      } catch (error) {
+        // ... error handling
+      }
+    };
+  
+    const signInWithMicrosoft = async () => {
+      try {
+        // ... sign-in logic
+        navigate('/profile'); // Ensure redirect to /profile
+      } catch (error) {
+        // ... error handling
+      }
+    };
+  
+    // ... rest of the provider
+  }; 
 };
