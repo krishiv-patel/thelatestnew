@@ -12,6 +12,12 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Profile from './components/Profile';
 import UserProfile from './components/UserProfile';
 import { ROUTES } from '../constants/routes';
+import { useState, useEffect } from 'react';
+import { CheckoutSteps } from './components/checkout/CheckoutSteps';
+import { OrderSummary } from './components/checkout/OrderSummary';
+import { AddressForm } from './components/checkout/AddressForm';
+import { PaymentForm } from './components/checkout/PaymentForm';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 
 // Lazy load components
 const Hero = React.lazy(() => import('./components/Hero'));
@@ -25,6 +31,7 @@ const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
 const PrivacyPolicy = React.lazy(() => import('./components/PrivacyPolicy'));
 const TermsConditions = React.lazy(() => import('./components/TermsConditions'));
 const ProtectedRoute = React.lazy(() => import('./components/ProtectedRoute'));
+const OrderSuccess = React.lazy(() => import('./components/OrderSuccess'));
 
 function App() {
   return (
@@ -83,6 +90,7 @@ function App() {
                         <Route path="/profile" element={<Profile />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/terms-conditions" element={<TermsConditions />} />
+                        <Route path="/order-confirmation" element={<OrderSuccess />} />
                       </Routes>
                     </Suspense>
                   </main>
