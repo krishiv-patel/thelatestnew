@@ -1,12 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle } from 'lucide-react';
 
-const OrderSuccess: React.FC = () => {
+export default function OrderSuccess() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-green-50">
       <div className="bg-white p-8 rounded-md shadow-md text-center">
-        <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
         <h2 className="text-3xl font-bold text-green-600 mb-4">Order Placed Successfully!</h2>
         <p className="text-gray-700 mb-6">
           Thank you for your purchase. Your order is being processed and will be delivered soon.
@@ -20,6 +18,4 @@ const OrderSuccess: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default OrderSuccess; 
+} 

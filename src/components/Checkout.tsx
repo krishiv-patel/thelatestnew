@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -9,22 +9,19 @@ import AddressForm from './checkout/AddressForm';
 import PaymentForm from './checkout/PaymentForm';
 import OrderSummary from './checkout/OrderSummary';
 import OrderSuccess from './OrderSuccess';
-
-type Address = {
-  fullName: string;
-  streetAddress: string;
-  apartment: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  phone: string;
-};
+import { Address } from '../types/address';
+import { Order } from '../types/order';
 
 const Checkout: React.FC = () => {
-  const { cartItems, totalAmount, clearCart } = useCart();
+  const { cartItems, totalAmount, clearCart, updateQuantity } = useCart();
   const { user, userProfile } = useAuth();
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+
+  const handleQuantityChange = (id: string, quantity: number) => {
+    if (quantity < 1) return; // Prevent quantity less than 1
+    updateQuantity(id, quantity);
+  };
 
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [address, setAddress] = useState<Address>({
@@ -41,7 +38,7 @@ const Checkout: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [orderSuccess, setOrderSuccess] = useState<boolean>(false);
 
-  // Define constants for shipping and tax
+  // Constants for shipping and tax
   const SHIPPING_COST = 9.99;
   const TAX_RATE = 0.10; // 10% tax
 
@@ -54,8 +51,13 @@ const Checkout: React.FC = () => {
             setAddress(cart.shippingAddress);
           } else if (userProfile && userProfile.address) {
             setAddress({
-              ...address,
-              streetAddress: userProfile.address,
+              fullName: `${userProfile.firstName} ${userProfile.lastName}`,
+              streetAddress: userProfile.address.streetAddress || '',
+              apartment: userProfile.address.apartment || '',
+              city: userProfile.address.city || '',
+              state: userProfile.address.state || '',
+              zipCode: userProfile.address.zipCode || '',
+              phone: userProfile.address.phone || '',
             });
           }
         } catch (error) {
@@ -70,94 +72,77 @@ const Checkout: React.FC = () => {
   }, [user, userProfile]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAddress({
-      ...address,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleNext = () => {
-    if (currentStep === 1) {
-      if (validateAddress()) {
-        setCurrentStep(2);
-      }
-    } else if (currentStep === 2) {
-      setCurrentStep(3);
-    }
+    const { name, value } = e.target;
+    setAddress((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleBack = () => {
-    setCurrentStep(prev => (prev > 1 ? prev - 1 : prev));
+    setCurrentStep(prev => prev - 1);
   };
 
-  const validateAddress = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!address.fullName.trim()) {
-      newErrors.fullName = 'Full name is required.';
-    }
-    if (!address.streetAddress.trim()) {
-      newErrors.streetAddress = 'Street address is required.';
-    }
-    if (!address.city.trim()) {
-      newErrors.city = 'City is required.';
-    }
-    if (!address.state.trim()) {
-      newErrors.state = 'State is required.';
-    }
-    if (!address.zipCode.trim()) {
-      newErrors.zipCode = 'ZIP Code is required.';
-    }
-    if (!address.phone.trim()) {
-      newErrors.phone = 'Phone number is required.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const handleNext = () => {
+    setCurrentStep(prev => prev + 1);
   };
 
-  const calculateSubtotal = () => {
+  const calculateSubtotal = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  };
+  }, [cartItems]);
 
-  const calculateTax = () => {
-    return calculateSubtotal() * TAX_RATE;
-  };
+  const calculateTax = useMemo(() => {
+    return calculateSubtotal * TAX_RATE;
+  }, [calculateSubtotal]);
 
-  const calculateTotal = () => {
-    return calculateSubtotal() + SHIPPING_COST + calculateTax();
-  };
+  const calculateTotal = useMemo(() => {
+    return calculateSubtotal + SHIPPING_COST + calculateTax;
+  }, [calculateSubtotal, calculateTax]);
 
   const handleCheckout = async () => {
     setLoading(true);
 
     try {
       if (user && user.email) {
+        // Validate all required fields in the address
+        if (
+          !address.fullName.trim() ||
+          !address.streetAddress.trim() ||
+          !address.city.trim() ||
+          !address.state.trim() ||
+          !address.zipCode.trim() ||
+          !address.phone.trim()
+        ) {
+          showNotification('Please complete all required address fields.', 'error');
+          setLoading(false);
+          return;
+        }
+
         // Update Cart's shippingAddress and paymentMethod
         await firestoreDB.updateCart(user.email, {
-          shippingAddress: address,
+          shippingAddress: address, // Address object
           paymentMethod: paymentMethod,
         });
 
         // Update User Profile's address
         await firestoreDB.updateUserProfile(user.email, {
-          address: address.streetAddress,
+          address: address, // Address object
         });
 
         // Create Order in Firestore
-        const order = {
+        const order: Order = {
           userEmail: user.email,
           items: cartItems,
           shippingAddress: address,
           paymentMethod,
-          subtotal: calculateSubtotal(),
+          subtotal: calculateSubtotal,
           shippingCost: SHIPPING_COST,
-          tax: calculateTax(),
-          totalAmount: calculateTotal(),
+          tax: calculateTax,
+          totalAmount: calculateTotal,
           createdAt: new Date(),
         };
 
-        await firestoreDB.createOrder(user.email, order);
+        await firestoreDB.createOrder(order);
 
         showNotification('Checkout successful!', 'success');
         clearCart();
@@ -180,7 +165,11 @@ const Checkout: React.FC = () => {
   }
 
   if (orderSuccess) {
-    return <OrderSuccess />;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-green-600 text-2xl">Your order has been placed successfully!</div>
+      </div>
+    );
   }
 
   return (
@@ -192,11 +181,12 @@ const Checkout: React.FC = () => {
           <div className="space-y-6">
             <AddressForm address={address} errors={errors} onChange={handleAddressChange} />
             <OrderSummary
-              cartItems={cartItems}
-              subtotal={calculateSubtotal()}
-              shippingCost={SHIPPING_COST}
-              tax={calculateTax()}
-              total={calculateTotal()}
+              items={cartItems}
+              subtotal={calculateSubtotal}
+              shipping={SHIPPING_COST}
+              tax={calculateTax}
+              total={calculateTotal}
+              onUpdateQuantity={handleQuantityChange}
             />
           </div>
         )}
@@ -205,7 +195,16 @@ const Checkout: React.FC = () => {
           <PaymentForm paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} />
         )}
 
-        {currentStep === 3 && <OrderSummary cartItems={cartItems} totalAmount={calculateTotal()} />}
+        {currentStep === 3 && (
+          <OrderSummary
+            items={cartItems}
+            subtotal={calculateSubtotal}
+            shipping={SHIPPING_COST}
+            tax={calculateTax}
+            total={calculateTotal}
+            onUpdateQuantity={handleQuantityChange}
+          />
+        )}
 
         <div className="flex justify-between mt-6">
           {currentStep > 1 && (
@@ -226,7 +225,7 @@ const Checkout: React.FC = () => {
           )}
           {currentStep === 3 && (
             <button
-              onClick={() => handleCheckout()}
+              onClick={handleCheckout}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
               Place Order

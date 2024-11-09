@@ -21,8 +21,21 @@ interface AuthUser extends User {
   };
 }
 
+interface UserProfileData {
+  firstName: string;
+  lastName: string;
+  gender: string;
+  birthDate: string; // ISO string
+  address: string;
+  email: string;
+  emailVerified: boolean;
+  photoURL?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
+  userProfile: UserProfileData | null;
+  setUserProfile: (profile: UserProfileData) => void;
   loading: boolean;
   error: string | null;
   token: string | null;
@@ -48,6 +61,7 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -109,6 +123,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Add any advanced parameters if needed
           });
 
+          // Fetch and set user profile
+          try {
+            const fetchedProfile = await firestoreDB.getUserByEmail(currentUser.email);
+            setUserProfile(fetchedProfile || null);
+          } catch (err) {
+            console.error('Error fetching user profile:', err);
+            setError('Failed to fetch user profile.');
+          }
+
+          // Example: Check if user is admin
+          // This assumes you have a field in your user profile indicating admin status
+          if (userProfile?.roles?.includes('admin')) {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
         } catch (error) {
           console.error('Error setting up user session:', error);
           setUser(null);
@@ -300,49 +330,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearError = () => setError(null);
 
+  const value: AuthContextType = {
+    user,
+    userProfile,
+    setUserProfile,
+    loading,
+    error,
+    token,
+    isAdmin,
+    signInWithGoogle,
+    signInWithMicrosoft,
+    logout,
+    linkAccount,
+    unlinkAccount,
+    verifyEmail,
+    clearError,
+  };
+
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user,
-        loading,
-        error,
-        token,
-        isAdmin,
-        signInWithGoogle,
-        signInWithMicrosoft,
-        logout,
-        linkAccount,
-        unlinkAccount,
-        verifyEmail,
-        clearError
-      }}
-    >
-      {children}
+    <AuthContext.Provider value={value}>
+      {!loading && children}
     </AuthContext.Provider>
   );
-
-  const AuthProvider: React.FC = ({ children }) => {
-    const navigate = useNavigate();
-    // ... other state and functions
-  
-    const signInWithGoogle = async () => {
-      try {
-        // ... sign-in logic
-        navigate('/profile'); // Ensure redirect to /profile
-      } catch (error) {
-        // ... error handling
-      }
-    };
-  
-    const signInWithMicrosoft = async () => {
-      try {
-        // ... sign-in logic
-        navigate('/profile'); // Ensure redirect to /profile
-      } catch (error) {
-        // ... error handling
-      }
-    };
-  
-    // ... rest of the provider
-  }; 
 };

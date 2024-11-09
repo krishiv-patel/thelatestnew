@@ -4,18 +4,71 @@ import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNotification } from '../context/NotificationContext';
 import { useCart } from '../context/CartContext';
-import firestoreDB from '../utils/firestore';
+import { firestoreDB } from '../utils/firestore'; // Ensure correct import
+import { Package, MapPin, Settings, Shield, User } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import OrderHistory from './profile/OrderHistory';
+import ShippingAddresses from './profile/ShippingAddresses';
+import Preferences from './profile/Preferences';
+import Security from './profile/Security';
+import { storage } from '../firebase'; // Import Firebase Storage
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Address } from '../types/address'; // Import Address interface
+import { format } from 'date-fns';
 
 interface UserProfileData {
   firstName: string;
   lastName: string;
   gender: string;
   birthDate: string; // ISO string
-  address: string;
+  address: Address;
   email: string;
   emailVerified: boolean;
+  photoURL?: string; // Add photoURL
 }
 
+// Example for Form Field Component
+const FormField: React.FC<{
+  label: string;
+  id: string;
+  type: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  error?: string;
+  children?: React.ReactNode; // Allow children for select options
+  }> = ({ label, id, type, value, onChange, error, children }) => (
+  <div className="mb-4">
+    <label htmlFor={id} className="block text-gray-700 text-sm font-bold mb-2">
+      {label}
+    </label>
+    {type === 'select' ? (
+      <select
+        id={id}
+        name={id}
+        value={value}
+        onChange={onChange}
+        className={`mt-1 block w-full rounded-md border ${
+          error ? 'border-red-500' : 'border-gray-300'
+        } p-2 shadow-sm focus:border-green-500 focus:ring-green-500`}
+      >
+        {/* Options */}
+        {children}
+      </select>
+    ) : (
+      <input
+        type={type}
+        id={id}
+        name={id}
+        value={value}
+        onChange={onChange}
+        className={`mt-1 block w-full rounded-md border ${
+          error ? 'border-red-500' : 'border-gray-300'
+        } p-2 shadow-sm focus:border-green-500 focus:ring-green-500`}
+      />
+    )}
+    {error && <p className="text-red-500 text-xs italic mt-1">{error}</p>}
+  </div>
+);
 const Profile: React.FC = () => {
   const { user, userProfile, setUserProfile } = useAuth();
   const { showNotification } = useNotification();
@@ -25,13 +78,27 @@ const Profile: React.FC = () => {
     lastName: '',
     gender: '',
     birthDate: '',
-    address: '',
+    address: {
+      fullName: '',
+      streetAddress: '',
+      apartment: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      phone: '',
+    },
     email: '',
     emailVerified: false,
+    photoURL: '', // Initialize photoURL
   });
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const [email, setEmail] = useState<string>('');
+  const [name, setName] = useState<string>('');
+  const [lastLogin, setLastLogin] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState('personal');
+  const [uploading, setUploading] = useState<boolean>(false); // State to manage upload status
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -44,23 +111,54 @@ const Profile: React.FC = () => {
               lastName: userData.lastName || '',
               gender: userData.gender || '',
               birthDate: userData.birthDate || '',
-              address: userData.address || '',
+              address: userData.address || {
+                fullName: '',
+                streetAddress: '',
+                apartment: '',
+                city: '',
+                state: '',
+                zipCode: '',
+                phone: '',
+              },
               email: userData.email,
               emailVerified: user.emailVerified,
+              photoURL: user.photoURL || userData.photoURL || '', // Set photoURL
             });
             setUserProfile({
               firstName: userData.firstName || '',
               lastName: userData.lastName || '',
               gender: userData.gender || '',
               birthDate: userData.birthDate || '',
-              address: userData.address || '',
+              address: userData.address || {
+                fullName: '',
+                streetAddress: '',
+                apartment: '',
+                city: '',
+                state: '',
+                zipCode: '',
+                phone: '',
+              },
               email: userData.email,
               emailVerified: user.emailVerified,
+              photoURL: user.photoURL || userData.photoURL || '',
             });
-            setShippingAddress(userData.address || '');
+            setShippingAddress(userData.address || {
+              fullName: '',
+              streetAddress: '',
+              apartment: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              phone: '',
+            });
+            setEmail(userData.email);
+            setName(`${userData.firstName} ${userData.lastName}`);
+            // Assuming userData has lastLogin field
+            setLastLogin(userData.lastLogin ? userData.lastLogin.toDate() : null);
+            // Fetch other advanced parameters as needed
           }
-        } catch (error) {
-          console.error('Error fetching user profile:', error);
+        } catch (error: any) {
+          console.error('Error fetching profile:', error);
           showNotification('Failed to load profile.', 'error');
         } finally {
           setLoading(false);
@@ -82,8 +180,24 @@ const Profile: React.FC = () => {
       errors.lastName = 'Last name is required.';
     }
 
-    if (!profile.address.trim()) {
-      errors.address = 'Address is required.';
+    if (!profile.address.streetAddress?.trim()) {
+      errors.streetAddress = 'Street address is required.';
+    }
+
+    if (!profile.address.city?.trim()) {
+      errors.city = 'City is required.';
+    }
+
+    if (!profile.address.state?.trim()) {
+      errors.state = 'State is required.';
+    }
+
+    if (!profile.address.zipCode?.trim()) {
+      errors.zipCode = 'Zip code is required.';
+    }
+
+    if (!profile.address.phone?.trim()) {
+      errors.phone = 'Phone number is required.';
     }
 
     if (profile.birthDate) {
@@ -111,10 +225,62 @@ const Profile: React.FC = () => {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setProfile({
-      ...profile,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    // List of address-related field names
+    const addressFields = ['fullName', 'streetAddress', 'apartment', 'city', 'state', 'zipCode', 'phone'];
+
+    if (addressFields.includes(name)) {
+      setProfile((prev) => ({
+        ...prev,
+        address: {
+          ...prev.address,
+          [name]: value,
+        },
+      }));
+    } else {
+      setProfile((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const storageRef = ref(storage, `profilePhotos/${user?.uid}/${file.name}`);
+      setUploading(true);
+      try {
+        // Upload the file
+        await uploadBytes(storageRef, file);
+        // Get the download URL
+        const downloadURL = await getDownloadURL(storageRef);
+        // Update the user's photoURL in Firebase Auth
+        await auth.currentUser?.updateProfile({
+          photoURL: downloadURL,
+        });
+        // Update Firestore user profile
+        await firestoreDB.updateUserProfile(user.email, {
+          photoURL: downloadURL,
+        });
+        // Update local profile state
+        setProfile((prev) => ({
+          ...prev,
+          photoURL: downloadURL,
+        }));
+        setUserProfile((prev) => ({
+          ...prev,
+          photoURL: downloadURL,
+        }));
+        showNotification('Profile photo updated successfully.', 'success');
+      } catch (error) {
+        console.error('Error uploading profile photo:', error);
+        showNotification('Failed to upload profile photo.', 'error');
+      } finally {
+        setUploading(false);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -126,23 +292,27 @@ const Profile: React.FC = () => {
       }
 
       try {
-        // Update User Profile
+        // Update User Profile in Firestore
         await firestoreDB.updateUserProfile(user.email, {
           firstName: profile.firstName,
           lastName: profile.lastName,
           gender: profile.gender,
           birthDate: profile.birthDate,
-          address: profile.address,
+          address: profile.address, // Address object
+          // photoURL is handled separately
         });
 
         // Bi-directional synchronization: Update Cart's shippingAddress
         await firestoreDB.updateCart(user.email, {
-          shippingAddress: profile.address,
+          shippingAddress: profile.address, // Address object
         });
 
         // Update local CartContext's shippingAddress
         setShippingAddress(profile.address);
 
+        // Update other states if needed
+        setEmail(profile.email);
+        setName(`${profile.firstName} ${profile.lastName}`);
         showNotification('Profile updated successfully.', 'success');
         setIsEditing(false);
       } catch (error) {
@@ -154,159 +324,278 @@ const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-screen pt-16">
         <div className="text-xl">Loading profile...</div>
       </div>
     );
   }
 
+  const tabs = [
+    { id: 'personal', label: 'Personal Info', icon: User },
+    { id: 'orders', label: 'Order History', icon: Package },
+    { id: 'shipping', label: 'Shipping Addresses', icon: MapPin },
+    { id: 'preferences', label: 'Preferences', icon: Settings },
+    { id: 'security', label: 'Security', icon: Shield },
+  ];
+
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.4,
+        ease: 'easeOut',
+      },
+    },
+    exit: {
+      opacity: 0,
+      y: -20,
+      transition: {
+        duration: 0.3,
+      },
+    },
+  };
+
   return (
-    <div className="flex justify-center items-center py-10 bg-gray-100 min-h-screen">
-      <div className="w-full max-w-lg bg-white p-8 rounded shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Your Profile</h1>
-
-        {/* Email Verification Notice */}
-        {!profile.emailVerified && user?.providerData.some(p => p.providerId === 'password') && (
-          <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
-            <p>Your email is not verified.</p>
-            <button
-              onClick={resendVerification}
-              className="mt-2 bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-16" // Added pt-16 for top padding
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-3xl font-bold text-gray-900 mb-8"
+        >
+          My Account
+        </motion.h1>
+        
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar Navigation */}
+          <nav className="lg:w-64 flex-shrink-0">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white rounded-lg shadow-lg overflow-hidden backdrop-blur-sm bg-white/80"
             >
-              Resend Verification Email
-            </button>
-          </div>
-        )}
-
-        {profile.emailVerified || !user?.providerData.some(p => p.providerId === 'password') ? (
-          <div>
-            {!isEditing ? (
-              <div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Full Name:</label>
-                  <p>{profile.firstName} {profile.lastName}</p>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Gender:</label>
-                  <p>{profile.gender}</p>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Birth Date:</label>
-                  <p>{profile.birthDate ? new Date(profile.birthDate).toLocaleDateString() : 'N/A'}</p>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">Address:</label>
-                  <p>{profile.address}</p>
-                </div>
-                <div className="text-center">
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                  >
-                    Edit Profile
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="firstName">First Name<span className="text-red-500">*</span>:</label>
-                  <input
-                    type="text"
-                    id="firstName"
-                    name="firstName"
-                    value={profile.firstName}
-                    onChange={handleChange}
-                    className={`shadow appearance-none border ${formErrors.firstName ? 'border-red-500' : 'border-gray-300'} rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
-                    placeholder="Enter your first name"
-                  />
-                  {formErrors.firstName && (
-                    <p className="text-red-500 text-xs italic mt-1">{formErrors.firstName}</p>
-                  )}
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="lastName">Last Name<span className="text-red-500">*</span>:</label>
-                  <input
-                    type="text"
-                    id="lastName"
-                    name="lastName"
-                    value={profile.lastName}
-                    onChange={handleChange}
-                    className={`shadow appearance-none border ${formErrors.lastName ? 'border-red-500' : 'border-gray-300'} rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
-                    placeholder="Enter your last name"
-                  />
-                  {formErrors.lastName && (
-                    <p className="text-red-500 text-xs italic mt-1">{formErrors.lastName}</p>
-                  )}
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="gender">Gender:</label>
-                  <select
-                    id="gender"
-                    name="gender"
-                    value={profile.gender}
-                    onChange={handleChange}
-                    className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  >
-                    <option value="">Select Gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="birthDate">Birth Date:</label>
-                  <input
-                    type="date"
-                    id="birthDate"
-                    name="birthDate"
-                    value={profile.birthDate}
-                    onChange={handleChange}
-                    className={`shadow appearance-none border ${formErrors.birthDate ? 'border-red-500' : 'border-gray-300'} rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
-                  />
-                  {formErrors.birthDate && (
-                    <p className="text-red-500 text-xs italic mt-1">{formErrors.birthDate}</p>
-                  )}
-                </div>
-                <div className="mb-6">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="address">Address<span className="text-red-500">*</span>:</label>
-                  <input
-                    type="text"
-                    id="address"
-                    name="address"
-                    value={profile.address}
-                    onChange={handleChange}
-                    className={`shadow appearance-none border ${formErrors.address ? 'border-red-500' : 'border-gray-300'} rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
-                    placeholder="Enter your address"
-                  />
-                  {formErrors.address && (
-                    <p className="text-red-500 text-xs italic mt-1">{formErrors.address}</p>
-                  )}
-                </div>
-                <div className="flex justify-between">
-                  <button
-                    onClick={handleSave}
-                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditing(false);
-                      setFormErrors({});
+              {tabs.map((tab, index) => {
+                const Icon = tab.icon;
+                return (
+                  <motion.button
+                    key={tab.id}
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{
+                      opacity: 1,
+                      x: 0,
+                      transition: { delay: index * 0.1 },
                     }}
-                    className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`w-full flex items-center px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+                      activeTab === tab.id
+                        ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
                   >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
+                    <Icon className="h-5 w-5 mr-3" />
+                    {tab.label}
+                  </motion.button>
+                );
+              })}
+            </motion.div>
+          </nav>
+
+          {/* Main Content */}
+          <motion.div
+            className="flex-1"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+          >
+            <div className="bg-white rounded-lg shadow-lg p-6 backdrop-blur-sm bg-white/80">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  {activeTab === 'personal' && (
+                    <div>
+                      {/* Email Verification Notice */}
+                      {!profile.emailVerified && user?.providerData.some(p => p.providerId === 'password') && (
+                        <div className="mb-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+                          <p>Your email is not verified.</p>
+                          <button
+                            onClick={resendVerification}
+                            className="mt-2 bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded"
+                          >
+                            Resend Verification Email
+                          </button>
+                        </div>
+                      )}
+                      {!isEditing ? (
+                        <div>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Full Name:</label>
+                            <p>{profile.firstName} {profile.lastName}</p>
+                          </div>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Gender:</label>
+                            <p>{profile.gender}</p>
+                          </div>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Birth Date:</label>
+                            <p>
+                              {profile.birthDate
+                                ? format(new Date(profile.birthDate), 'dd MMMM yyyy')
+                                : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Address:</label>
+                            <p>{profile.address.streetAddress}</p>
+                          </div>
+                          <div className="text-center">
+                            <button
+                              onClick={() => setIsEditing(true)}
+                              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                            >
+                              Edit Profile
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <FormField
+                            label="First Name"
+                            id="firstName"
+                            type="text"
+                            value={profile.firstName}
+                            onChange={handleChange}
+                            error={formErrors.firstName}
+                          />
+                          <FormField
+                            label="Last Name"
+                            id="lastName"
+                            type="text"
+                            value={profile.lastName}
+                            onChange={handleChange}
+                            error={formErrors.lastName}
+                          />
+                          <FormField
+                            label="Gender"
+                            id="gender"
+                            type="select"
+                            value={profile.gender}
+                            onChange={handleChange}
+                          >
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </FormField>
+                          <FormField
+                            label="Birth Date"
+                            id="birthDate"
+                            type="date"
+                            value={profile.birthDate}
+                            onChange={handleChange}
+                            error={formErrors.birthDate}
+                          />
+                          <FormField
+                            label="Street Address"
+                            id="streetAddress"
+                            type="text"
+                            value={profile.address.streetAddress}
+                            onChange={handleChange}
+                            error={formErrors.streetAddress}
+                          />
+                          <FormField
+                            label="Full Name"
+                            id="fullName"
+                            type="text"
+                            value={profile.address.fullName}
+                            onChange={handleChange}
+                            error={formErrors.fullName}
+                          />
+                          <FormField
+                            label="Apartment"
+                            id="apartment"
+                            type="text"
+                            value={profile.address.apartment}
+                            onChange={handleChange}
+                            error={formErrors.apartment}
+                          />
+                          <FormField
+                            label="City"
+                            id="city"
+                            type="text"
+                            value={profile.address.city}
+                            onChange={handleChange}
+                            error={formErrors.city}
+                          />
+                          <FormField
+                            label="State"
+                            id="state"
+                            type="text"
+                            value={profile.address.state}
+                            onChange={handleChange}
+                            error={formErrors.state}
+                          />
+                          <FormField
+                            label="ZIP Code"
+                            id="zipCode"
+                            type="text"
+                            value={profile.address.zipCode}
+                            onChange={handleChange}
+                            error={formErrors.zipCode}
+                          />
+                          <FormField
+                            label="Phone"
+                            id="phone"
+                            type="tel"
+                            value={profile.address.phone}
+                            onChange={handleChange}
+                            error={formErrors.phone}
+                          />
+                          <div className="flex justify-between">
+                            <button
+                              onClick={handleSave}
+                              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsEditing(false);
+                                setFormErrors({});
+                              }}
+                              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Render other tabs */}
+                  {activeTab === 'orders' && <OrderHistory />}
+                  {activeTab === 'shipping' && <ShippingAddresses />}
+                  {activeTab === 'preferences' && <Preferences />}
+                  {activeTab === 'security' && <Security />}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

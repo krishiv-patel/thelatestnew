@@ -15,7 +15,11 @@ interface AddressFormProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) => {
+export const AddressForm: React.FC<AddressFormProps> = ({
+  address,
+  errors,
+  onChange,
+}) => {
   return (
     <div className="bg-white rounded-lg p-6 space-y-6">
       <div className="flex items-center space-x-2">
@@ -25,7 +29,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Full Name<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">Full Name</label>
           <input
             type="text"
             name="fullName"
@@ -40,7 +44,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Phone<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">Phone</label>
           <input
             type="tel"
             name="phone"
@@ -55,7 +59,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
         </div>
 
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700">Street Address<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">Street Address</label>
           <input
             type="text"
             name="streetAddress"
@@ -83,7 +87,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">City<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">City</label>
           <input
             type="text"
             name="city"
@@ -98,7 +102,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">State<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">State</label>
           <input
             type="text"
             name="state"
@@ -113,7 +117,7 @@ const AddressForm: React.FC<AddressFormProps> = ({ address, errors, onChange }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">ZIP Code<span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
           <input
             type="text"
             name="zipCode"

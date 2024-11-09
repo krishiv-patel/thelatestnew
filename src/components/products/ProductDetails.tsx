@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ShoppingCart, ShoppingBag } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
-import { Product } from '../../types/Product';
+import { Product } from '../../types/product';
 
 const formatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -15,8 +15,17 @@ export default function ProductDetails() {
   const navigate = useNavigate();
   const { addToCart, removeFromCart, decreaseQuantity, cartItems } = useCart();
 
-  // Assuming you have a function to fetch product details by ID
-  const product: Product | undefined = undefined; // Replace with actual fetching logic
+  const [product, setProduct] = React.useState<Product | undefined>(undefined);
+
+  React.useEffect(() => {
+    const fetchProduct = async () => {
+      // Implement your product fetching logic here
+      // For example:
+      // const fetchedProduct = await firestoreDB.getProductById(productId);
+      // setProduct(fetchedProduct);
+    };
+    fetchProduct();
+  }, [productId]);
 
   if (!product) {
     return (
@@ -26,8 +35,8 @@ export default function ProductDetails() {
     );
   }
 
-  const isInCart = cartItems.some(ci => ci.productId === product.id);
-  const cartItem = cartItems.find(ci => ci.productId === product.id);
+  const isInCart = cartItems.some(ci => ci.id === product.id);
+  const cartItem = cartItems.find(ci => ci.id === product.id);
 
   const handleBuyNow = () => {
     addToCart(product);

@@ -105,6 +105,7 @@ export default function Contact() {
                   onChange={handleChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                   required
+                  aria-describedby="message-error"
                 />
               </div>
               <button

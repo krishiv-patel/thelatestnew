@@ -6,8 +6,14 @@ import {
   updateDoc,
   collection,
   onSnapshot,
-  DocumentData
+  DocumentData,
+  query,
+  where,
+  getDocs,
+  Timestamp
 } from 'firebase/firestore';
+import { Order, FirestoreOrder } from '../types/order';
+import { Address } from '../types/address';
 
 // Rate limiting configuration with exponential backoff
 const RATE_LIMIT = {
@@ -83,20 +89,49 @@ interface Cart {
   items: CartItem[];
   totalAmount: number;
   updatedAt: Date;
-  shippingAddress?: string;
+  shippingAddress?: Address;
   paymentMethod?: 'cod' | 'online';
   deliveryStatus?: 'pending' | 'shipped' | 'delivered';
 }
 
 interface Order {
-  orderId: string;
-  email: string;
-  items: CartItem[];
+  id: string; // Firestore document ID
+  userEmail: string;
+  createdAt: Date;
   totalAmount: number;
   paymentMethod: 'cod' | 'online';
   status: 'placed' | 'processed' | 'shipped' | 'delivered';
-  createdAt: Date;
-  updatedAt: Date;
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    imageUrl?: string;
+  }[];
+}
+
+interface FirestoreOrder extends Omit<Order, 'id' | 'createdAt'> {
+  createdAt: firebase.firestore.Timestamp;
+}
+
+interface UserProfileData {
+  firstName: string;
+  lastName: string;
+  gender: string;
+  birthDate: string;
+  address: Address;
+  email: string;
+  emailVerified: boolean;
+  photoURL?: string;
+}
+
+interface Address {
+  fullName: string;
+  streetAddress: string;
+  apartment: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phone: string;
 }
 
 export const firestoreDB = {
@@ -135,18 +170,34 @@ export const firestoreDB = {
     }
   },
 
-  async getUserByEmail(email: string) {
+  async getUserByEmail(email: string): Promise<UserProfileData | null> {
     await requestManager.throttle();
     try {
       const userRef = doc(db, 'users', email.toLowerCase());
-      const userDoc = await getDoc(userRef);
-
-      if (!userDoc.exists()) {
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        return {
+          firstName: data.firstName || '',
+          lastName: data.lastName || '',
+          gender: data.gender || '',
+          birthDate: data.birthDate || '',
+          address: data.address || {
+            fullName: '',
+            streetAddress: '',
+            apartment: '',
+            city: '',
+            state: '',
+            zipCode: '',
+            phone: '',
+          },
+          email: data.email,
+          emailVerified: data.emailVerified,
+          photoURL: data.photoURL || '',
+        };
+      } else {
         return null;
       }
-
-      requestManager.resetRetryCount();
-      return { id: userDoc.id, ...userDoc.data() };
     } catch (error: any) {
       if (error.code === 'resource-exhausted') {
         await requestManager.exponentialBackoff();
@@ -156,21 +207,20 @@ export const firestoreDB = {
     }
   },
 
-  async updateUserProfile(email: string, newData: Partial<UserProfile>) {
-    await requestManager.throttle();
+  async updateUserProfile(email: string, updatedData: Partial<FirestoreUser>) {
     try {
-      const userRef = doc(db, 'users', email.toLowerCase());
-      await updateDoc(userRef, {
-        ...newData,
-        updatedAt: new Date(),
-      });
+      const usersCollection = collection(db, 'users');
+      const q = query(usersCollection, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
 
-      requestManager.resetRetryCount();
-    } catch (error: any) {
-      if (error.code === 'resource-exhausted') {
-        await requestManager.exponentialBackoff();
-        return this.updateUserProfile(email, newData);
+      if (querySnapshot.empty) {
+        throw new Error('User not found.');
       }
+
+      const userDoc = querySnapshot.docs[0];
+      const userRef = doc(db, 'users', userDoc.id);
+      await updateDoc(userRef, updatedData);
+    } catch (error) {
       console.error('Error updating user profile:', error);
       throw error;
     }
@@ -189,7 +239,15 @@ export const firestoreDB = {
         email: email.toLowerCase(),
         totalAmount,
         updatedAt: new Date(),
-        shippingAddress: cartData.shippingAddress || '',
+        shippingAddress: cartData.shippingAddress || {
+          fullName: '',
+          streetAddress: '',
+          apartment: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          phone: '',
+        },
         paymentMethod: cartData.paymentMethod || 'cod',
         deliveryStatus: cartData.deliveryStatus || 'pending',
       });
@@ -253,15 +311,16 @@ export const firestoreDB = {
   },
 
   // Create Order
-  async createOrder(orderData: Partial<Order>) {
+  async createOrder(orderData: Omit<Order, 'id'>) {
     await requestManager.throttle();
     try {
       const ordersRef = collection(db, 'orders');
       const orderDoc = doc(ordersRef);
       await setDoc(orderDoc, {
         ...orderData,
-        createdAt: new Date(),
+        createdAt: orderData.createdAt,
         updatedAt: new Date(),
+        status: 'placed',
       });
 
       requestManager.resetRetryCount();
@@ -314,6 +373,36 @@ export const firestoreDB = {
         callback(null);
       }
     );
+  },
+
+  // Get Orders by User Email
+  async getOrdersByUserEmail(email: string): Promise<Order[]> {
+    try {
+      const ordersCollection = collection(db, 'orders');
+      const q = query(ordersCollection, where('userEmail', '==', email));
+      const querySnapshot = await getDocs(q);
+
+      const orders: Order[] = [];
+      querySnapshot.forEach(docSnapshot => {
+        const data = docSnapshot.data();
+        orders.push({
+          id: docSnapshot.id,
+          userEmail: data.userEmail,
+          createdAt: data.createdAt.toDate(), // Convert Timestamp to Date
+          totalAmount: data.totalAmount,
+          shippingCost: data.shippingCost,
+          tax: data.tax,
+          paymentMethod: data.paymentMethod,
+          status: data.status,
+          items: data.items,
+        });
+      });
+
+      return orders;
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      throw error;
+    }
   },
 };
 

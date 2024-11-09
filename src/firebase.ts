@@ -4,6 +4,7 @@ import { getAnalytics } from "firebase/analytics";
 import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -42,5 +43,7 @@ export const db = initializeFirestore(app, {
 });
 
 export const functions = getFunctions(app);
+
+export const storage = getStorage(app);
 
 export default app;
