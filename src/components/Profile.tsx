@@ -25,6 +25,12 @@ interface UserProfileData {
   email: string;
   emailVerified: boolean;
   photoURL?: string; // Add photoURL
+  preferences: {
+    notifications: boolean;
+    smsNotifications: boolean;
+    marketingPreferences: boolean;
+    theme: string;
+  };
 }
 
 // Example for Form Field Component
@@ -90,6 +96,12 @@ const Profile: React.FC = () => {
     email: '',
     emailVerified: false,
     photoURL: '', // Initialize photoURL
+    preferences: {
+      notifications: true,
+      smsNotifications: false,
+      marketingPreferences: false,
+      theme: "light",
+    },
   });
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -105,6 +117,8 @@ const Profile: React.FC = () => {
       if (user && user.email) {
         try {
           const userData = await firestoreDB.getUserByEmail(user.email);
+          console.log('Fetched User Data:', userData); // Add this line for debugging
+
           if (userData) {
             setProfile({
               firstName: userData.firstName || '',
@@ -122,7 +136,13 @@ const Profile: React.FC = () => {
               },
               email: userData.email,
               emailVerified: user.emailVerified,
-              photoURL: user.photoURL || userData.photoURL || '', // Set photoURL
+              photoURL: user.photoURL || userData.photoURL || '',
+              preferences: userData.preferences || {
+                notifications: true,
+                smsNotifications: false,
+                marketingPreferences: false,
+                theme: "light",
+              },
             });
             setUserProfile({
               firstName: userData.firstName || '',
@@ -141,23 +161,15 @@ const Profile: React.FC = () => {
               email: userData.email,
               emailVerified: user.emailVerified,
               photoURL: user.photoURL || userData.photoURL || '',
+              preferences: userData.preferences || {
+                notifications: true,
+                smsNotifications: false,
+                marketingPreferences: false,
+                theme: "light",
+              },
             });
-            setShippingAddress(userData.address || {
-              fullName: '',
-              streetAddress: '',
-              apartment: '',
-              city: '',
-              state: '',
-              zipCode: '',
-              phone: '',
-            });
-            setEmail(userData.email);
-            setName(`${userData.firstName} ${userData.lastName}`);
-            // Assuming userData has lastLogin field
-            setLastLogin(userData.lastLogin ? userData.lastLogin.toDate() : null);
-            // Fetch other advanced parameters as needed
           }
-        } catch (error: any) {
+        } catch (error) {
           console.error('Error fetching profile:', error);
           showNotification('Failed to load profile.', 'error');
         } finally {
@@ -167,7 +179,7 @@ const Profile: React.FC = () => {
     };
 
     fetchProfile();
-  }, [user, setUserProfile, setShippingAddress, showNotification]);
+  }, [user]);
 
   const validateForm = (): boolean => {
     const errors: { [key: string]: string } = {};

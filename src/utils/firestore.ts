@@ -126,6 +126,12 @@ interface UserProfileData {
   email: string;
   emailVerified: boolean;
   photoURL?: string;
+  preferences: {
+    notifications: boolean;           // Email Notifications
+    smsNotifications: boolean;       // SMS Notifications
+    marketingPreferences: boolean;   // Marketing Preferences
+    theme: string;
+  };
 }
 
 interface Address {
@@ -148,9 +154,13 @@ export const firestoreDB = {
         email: email.toLowerCase(),
         createdAt: new Date(),
         updatedAt: new Date(),
-        preferences: userData.preferences || {
-          theme: "light",
-          notifications: true
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        preferences: {
+          notifications: true,
+          smsNotifications: true,
+          marketingPreferences: true,
+          theme: "light"
         },
         settings: userData.settings || {
           language: "en",
@@ -199,6 +209,12 @@ export const firestoreDB = {
           email: data.email,
           emailVerified: data.emailVerified,
           photoURL: data.photoURL || '',
+          preferences: data.preferences || {
+            notifications: true,
+            smsNotifications: false,
+            marketingPreferences: false,
+            theme: "light",
+          },
         };
       } else {
         return null;
