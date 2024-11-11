@@ -3,6 +3,7 @@ import firestoreDB from '../utils/firestore';
 import { useAuth } from './AuthContext';
 import { CartItem } from '../types/product';
 import { useNotification } from './NotificationContext';
+import { Address } from '../types/address';
 
 interface CartContextProps {
   cartItems: CartItem[];
@@ -14,8 +15,8 @@ interface CartContextProps {
   clearCart: () => Promise<void>;
   getTotalItems: () => number;
   getTotalPrice: () => number;
-  shippingAddress: string;
-  setShippingAddress: (address: string) => void;
+  shippingAddress: Address;
+  setShippingAddress: (address: Address) => void;
 }
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
@@ -34,7 +35,15 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [shippingAddress, setShippingAddress] = useState<string>('');
+  const [shippingAddress, setShippingAddress] = useState<Address>({
+    fullName: '',
+    streetAddress: '',
+    apartment: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    phone: '',
+  });
 
   // Fetch cart from Firestore on mount and when user changes
   useEffect(() => {
@@ -44,8 +53,26 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           const cart = await firestoreDB.getCartByUserEmail(user.email);
           if (cart && cart.items) {
             setCartItems(cart.items);
+            setShippingAddress(cart.shippingAddress || {
+              fullName: '',
+              streetAddress: '',
+              apartment: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              phone: '',
+            });
           } else {
             setCartItems([]);
+            setShippingAddress({
+              fullName: '',
+              streetAddress: '',
+              apartment: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              phone: '',
+            });
           }
         } catch (error) {
           console.error('Error fetching cart:', error);
@@ -53,18 +80,30 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         }
       } else {
         setCartItems([]);
+        setShippingAddress({
+          fullName: '',
+          streetAddress: '',
+          apartment: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          phone: '',
+        });
       }
     };
 
     fetchCart();
   }, [user, showNotification]);
 
-  // Sync cart with Firestore whenever cartItems change
+  // Sync cart with Firestore whenever cartItems or shippingAddress change
   useEffect(() => {
     const syncCart = async () => {
       if (user && user.email) {
         try {
-          await firestoreDB.updateCart(user.email, { items: cartItems });
+          await firestoreDB.updateCart(user.email, {
+            items: cartItems,
+            shippingAddress: shippingAddress,
+          });
         } catch (error) {
           console.error('Error syncing cart:', error);
           showNotification('Failed to sync cart.', 'error');
@@ -73,7 +112,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     };
 
     syncCart();
-  }, [cartItems, user, showNotification]);
+  }, [cartItems, shippingAddress, user, showNotification]);
 
   const addToCart = async (product: CartItem) => {
     const existingItem = cartItems.find(item => item.id === product.id);

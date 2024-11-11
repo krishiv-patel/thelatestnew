@@ -9,7 +9,7 @@ interface OrderItem {
   name: string;
   quantity: number;
   price: number;
-  imageUrl?: string;
+  image?: string;
 }
 
 const OrderHistory: React.FC = () => {
@@ -161,9 +161,9 @@ const OrderHistory: React.FC = () => {
                   className="flex items-center justify-between text-sm"
                 >
                   <div className="flex items-center gap-4">
-                    {item.imageUrl ? (
+                    {item.image ? (
                       <img
-                        src={item.imageUrl}
+                        src={item.image}
                         alt={`Image of ${item.name}`}
                         className="w-16 h-16 object-cover rounded"
                       />
@@ -221,12 +221,18 @@ const OrderHistory: React.FC = () => {
                   <h5 className="text-md font-semibold mb-2">Shipping Address</h5>
                   {order.shippingAddress ? (
                     <>
-                      <p>Name: {order.shippingAddress.name}</p>
-                      <p>Street: {order.shippingAddress.street}</p>
+                      <p>Name: {order.shippingAddress.fullName}</p>
+                      <p>Street: {order.shippingAddress.streetAddress}</p>
+                      {order.shippingAddress.apartment && (
+                        <p>Apartment: {order.shippingAddress.apartment}</p>
+                      )}
                       <p>City: {order.shippingAddress.city}</p>
                       <p>State: {order.shippingAddress.state}</p>
-                      <p>Zip: {order.shippingAddress.zip}</p>
-                      <p>Country: {order.shippingAddress.country}</p>
+                      <p>Zip Code: {order.shippingAddress.zipCode}</p>
+                      <p>Phone: {order.shippingAddress.phone}</p>
+                      {order.shippingAddress.country && (
+                        <p>Country: {order.shippingAddress.country}</p>
+                      )}
                     </>
                   ) : (
                     <p className="text-gray-500">No shipping address provided.</p>

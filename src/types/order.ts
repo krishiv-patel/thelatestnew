@@ -10,18 +10,20 @@ export interface FirestoreOrder {
   paymentMethod: 'cod' | 'online';
   status: 'placed' | 'processed' | 'shipped' | 'delivered';
   shippingAddress?: {
-    name?: string;
-    street?: string;
+    fullName?: string;
+    streetAddress?: string;
+    apartment?: string;
     city?: string;
     state?: string;
-    zip?: string;
-    country?: string;
+    zipCode?: string;
+    phone?: string;
+    country?: string; // Include if applicable
   };
   items: {
     name: string;
     quantity: number;
     price: number;
-    imageUrl?: string;
+    image?: string;
   }[];
 }
 

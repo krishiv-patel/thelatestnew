@@ -87,7 +87,10 @@ interface CartItem {
 interface Cart {
   email: string;
   items: CartItem[];
-  totalAmount: number;
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  total: number;
   updatedAt: Date;
   shippingAddress?: Address;
   paymentMethod?: 'cod' | 'online';
@@ -105,8 +108,9 @@ interface Order {
     name: string;
     quantity: number;
     price: number;
-    imageUrl?: string;
+    image?: string;
   }[];
+  shippingAddress?: Address;
 }
 
 interface FirestoreOrder extends Omit<Order, 'id' | 'createdAt'> {
@@ -177,9 +181,10 @@ export const firestoreDB = {
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
         const data = userSnap.data();
+        const nameParts = data.name ? data.name.split(' ') : ['', ''];
         return {
-          firstName: data.firstName || '',
-          lastName: data.lastName || '',
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
           gender: data.gender || '',
           birthDate: data.birthDate || '',
           address: data.address || {
@@ -269,18 +274,40 @@ export const firestoreDB = {
     await requestManager.throttle();
     try {
       const cartRef = doc(db, 'carts', email.toLowerCase());
-      const totalAmount = cartData.items
-        ? cartData.items.reduce((total, item) => total + item.price * item.quantity, 0)
-        : 0;
 
-      await updateDoc(cartRef, {
-        ...cartData,
-        totalAmount,
-        updatedAt: new Date(),
-        ...(cartData.shippingAddress && { shippingAddress: cartData.shippingAddress }),
-        ...(cartData.paymentMethod && { paymentMethod: cartData.paymentMethod }),
-        ...(cartData.deliveryStatus && { deliveryStatus: cartData.deliveryStatus }),
-      });
+      // Fetch the existing cart to preserve fields not being updated
+      const cartSnap = await getDoc(cartRef);
+      if (!cartSnap.exists()) {
+        // If the cart doesn't exist, create it with the provided data
+        return this.createCart(email, cartData);
+      }
+
+      const existingCart = cartSnap.data() as Cart;
+
+      // Calculate updated pricing fields
+      const subtotal = cartData.items
+        ? cartData.items.reduce((total, item) => total + item.price * item.quantity, 0)
+        : existingCart.subtotal;
+
+      const shipping = 9.99; // Fixed shipping cost; adjust as needed
+      const tax = parseFloat((subtotal * 0.10).toFixed(2)); // 10% tax
+      const total = parseFloat((subtotal + shipping + tax).toFixed(2));
+
+      await setDoc(
+        cartRef,
+        {
+          ...cartData,
+          subtotal,
+          shipping,
+          tax,
+          total,
+          updatedAt: new Date(),
+          shippingAddress: cartData.shippingAddress || existingCart.shippingAddress,
+          paymentMethod: cartData.paymentMethod || existingCart.paymentMethod,
+          deliveryStatus: cartData.deliveryStatus || existingCart.deliveryStatus,
+        },
+        { merge: true }
+      );
 
       requestManager.resetRetryCount();
     } catch (error: any) {
@@ -388,13 +415,29 @@ export const firestoreDB = {
         orders.push({
           id: docSnapshot.id,
           userEmail: data.userEmail,
-          createdAt: data.createdAt.toDate(), // Convert Timestamp to Date
+          createdAt: data.createdAt.toDate(),
           totalAmount: data.totalAmount,
           shippingCost: data.shippingCost,
           tax: data.tax,
           paymentMethod: data.paymentMethod,
           status: data.status,
-          items: data.items,
+          shippingAddress: data.shippingAddress
+            ? {
+                fullName: data.shippingAddress.fullName,
+                streetAddress: data.shippingAddress.streetAddress,
+                apartment: data.shippingAddress.apartment,
+                city: data.shippingAddress.city,
+                state: data.shippingAddress.state,
+                zipCode: data.shippingAddress.zipCode,
+                phone: data.shippingAddress.phone,
+              }
+            : undefined,
+          items: data.items.map((item: any) => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            image: item.image,
+          })),
         });
       });
 

@@ -118,15 +118,25 @@ const Checkout: React.FC = () => {
           return;
         }
 
-        // Update Cart's shippingAddress and paymentMethod
+        // Calculate pricing fields
+        const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const shipping = 9.99; // Fixed shipping cost; adjust as needed
+        const tax = parseFloat((subtotal * 0.10).toFixed(2)); // 10% tax
+        const total = parseFloat((subtotal + shipping + tax).toFixed(2));
+
+        // Update Cart's shippingAddress and pricing fields
         await firestoreDB.updateCart(user.email, {
-          shippingAddress: address, // Address object
+          shippingAddress: address,
+          subtotal,
+          shipping: shipping,
+          tax,
+          total,
           paymentMethod: paymentMethod,
         });
 
         // Update User Profile's address
         await firestoreDB.updateUserProfile(user.email, {
-          address: address, // Address object
+          address: address,
         });
 
         // Create Order in Firestore
@@ -135,10 +145,10 @@ const Checkout: React.FC = () => {
           items: cartItems,
           shippingAddress: address,
           paymentMethod,
-          subtotal: calculateSubtotal,
-          shippingCost: SHIPPING_COST,
-          tax: calculateTax,
-          totalAmount: calculateTotal,
+          subtotal,
+          shippingCost: shipping,
+          tax,
+          totalAmount: total,
           createdAt: new Date(),
         };
 
@@ -150,7 +160,7 @@ const Checkout: React.FC = () => {
       }
     } catch (error) {
       console.error('Error during checkout:', error);
-      showNotification('Checkout failed. Please try again.', 'error');
+      showNotification('Failed to complete checkout.', 'error');
     } finally {
       setLoading(false);
     }
