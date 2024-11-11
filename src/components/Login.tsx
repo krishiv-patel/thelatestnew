@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,6 +7,17 @@ import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { loginSchema, type LoginFormData } from '../schemas/auth';
 import { useAuth } from '../context/AuthContext';
 import Turnstile from './Turnstile';
+
+const loadTurnstileScript = () => {
+  if (!document.getElementById('cf-turnstile-js')) {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.id = 'cf-turnstile-js';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+  }
+};
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -90,6 +101,10 @@ const Login: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadTurnstileScript();
+  }, []);
 
   return (
     <motion.div
